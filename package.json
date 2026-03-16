@@ -1,0 +1,32 @@
+{
+  "name": "tsdraw",
+  "version": "0.1.0",
+  "private": true,
+  "description": "tsdraw - a tremendously small drawing library",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "build:core": "npm run build -w packages/tsdraw-core",
+    "build:react": "npm run build -w packages/tsdraw-react",
+    "build:demo": "npm run build -w apps/demo",
+    "dev": "npm run dev -w apps/demo",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "eslint packages/tsdraw-core/src packages/tsdraw-react/src apps/demo/src --max-warnings 0",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "eslint": "^9.15.0",
+    "globals": "^15.12.0",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

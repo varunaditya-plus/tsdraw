@@ -1,0 +1,63 @@
+/* tsdraw React UI - inspired by a certain someone */
+
+.tsdraw-container {
+  --tsdraw-color-bg: #fafafa;
+  --tsdraw-color-panel: #ffffff;
+  --tsdraw-color-muted: #ececec;
+  --tsdraw-color-selected: #111111;
+  --tsdraw-color-border: #d7d7d7;
+  --tsdraw-color-text: #1f1f1f;
+  --tsdraw-radius: 12px;
+  font-family: system-ui, sans-serif;
+  background: var(--tsdraw-color-bg);
+  overflow: hidden;
+}
+
+.tsdraw-toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  background: var(--tsdraw-color-panel);
+  border-radius: var(--tsdraw-radius);
+  border: 1px solid var(--tsdraw-color-border);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.85) inset, 0 6px 18px rgba(0, 0, 0, 0.14);
+  z-index: 100;
+  pointer-events: all;
+}
+
+.tsdraw-toolbar button {
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--tsdraw-color-text);
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.tsdraw-toolbar button:hover {
+  background: var(--tsdraw-color-muted);
+}
+.tsdraw-toolbar button[data-active="true"],
+.tsdraw-toolbar .tsdraw-toolbar-btn[data-active="true"] {
+  background: var(--tsdraw-color-selected);
+  color: white;
+}
+
+.tsdraw-toolbar-btn {
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+.tsdraw-toolbar-btn svg {
+  width: 22px;
+  height: 22px;
+}
