@@ -1,6 +1,8 @@
 // tsdraw-react - React components and hooks for tsdraw
 export { Tsdraw } from './components/TsdrawCanvas.js';
 export type {
+  TsdrawCustomElement,
+  TsdrawCustomElementRenderArgs,
   TsdrawCustomTool,
   TsdrawProps,
   TsdrawToolItem,

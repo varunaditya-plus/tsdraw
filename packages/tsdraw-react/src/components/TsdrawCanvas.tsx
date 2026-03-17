@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import type { DefaultToolId, ToolDefinition, ToolId } from 'tsdraw-core';
+import type { ColorStyle, DashStyle, DefaultToolId, SizeStyle, ToolDefinition, ToolId } from 'tsdraw-core';
 import { SelectionOverlay } from './SelectionOverlay.js';
 import { StylePanel } from './StylePanel.js';
 import { ToolOverlay } from './ToolOverlay.js';
@@ -61,6 +61,7 @@ export interface TsdrawUiOptions {
   stylePanel?: {
     placement?: TsdrawUiPlacement;
   };
+  customElements?: TsdrawCustomElement[];
   cursor?: {
     getCursor?: (context: TsdrawCursorContext) => string;
   };
@@ -71,6 +72,18 @@ export interface TsdrawUiOptions {
       currentTool: ToolId;
     }) => ReactNode;
   };
+}
+
+export interface TsdrawCustomElementRenderArgs {
+  currentTool: ToolId;
+  setTool: (tool: ToolId) => void;
+  applyDrawStyle: (partial: Partial<{ color: ColorStyle; dash: DashStyle; size: SizeStyle }>) => void;
+}
+
+export interface TsdrawCustomElement {
+  id: string;
+  placement?: TsdrawUiPlacement;
+  render: (args: TsdrawCustomElementRenderArgs) => ReactNode;
 }
 
 export interface TsdrawProps {
@@ -213,6 +226,7 @@ export function Tsdraw(props: TsdrawProps) {
     />
   );
   const overlayNode = props.uiOptions?.overlays?.renderToolOverlay?.({ defaultOverlay: defaultToolOverlay, overlayState: toolOverlay, currentTool }) ?? defaultToolOverlay;
+  const customElements = props.uiOptions?.customElements ?? [];
 
   return (
     <div
@@ -257,6 +271,19 @@ export function Tsdraw(props: TsdrawProps) {
         onDashSelect={(dash) => applyDrawStyle({ dash })}
         onSizeSelect={(size) => applyDrawStyle({ size })}
       />
+      {customElements.map((customElement) => (
+        <div
+          key={customElement.id}
+          style={{
+            position: 'absolute',
+            zIndex: 130,
+            pointerEvents: 'all',
+            ...resolvePlacementStyle(customElement.placement, 'top-left', 8, 8),
+          }}
+        >
+          {customElement.render({ currentTool, setTool, applyDrawStyle })}
+        </div>
+      ))}
       <Toolbar
         items={toolbarItems}
         style={toolbarPlacementStyle}
