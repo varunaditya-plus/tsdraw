@@ -5,6 +5,7 @@ export * from './canvas/viewport.js';
 export * from './canvas/renderer.js';
 export * from './input/inputManager.js';
 export * from './editor/Editor.js';
+export type { IEditor } from './editor/editorTypes.js';
 
 export * from './tools/toolManager.js';
 export * from './tools/pen/PenTool.js';

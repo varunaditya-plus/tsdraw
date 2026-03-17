@@ -4,7 +4,7 @@ import { createViewport, screenToPage } from '../canvas/viewport.js';
 import { CanvasRenderer } from '../canvas/renderer.js';
 import { InputManager } from '../input/inputManager.js';
 import type { ToolStateContext } from '../store/stateNode.js';
-import { ToolManager, type ToolId } from '../tools/toolManager.js';
+import { ToolManager, type ToolDefinition, type ToolId } from '../tools/toolManager.js';
 import { PenIdleState } from '../tools/pen/states/PenIdleState.js';
 import { PenDrawingState } from '../tools/pen/states/PenDrawingState.js';
 import { EraserIdleState } from '../tools/eraser/states/EraserIdleState.js';
@@ -19,6 +19,8 @@ import { DRAG_DISTANCE_SQUARED } from '../types.js';
 
 export interface EditorOptions {
   dragDistanceSquared?: number;
+  toolDefinitions?: ToolDefinition[];
+  initialToolId?: ToolId;
 }
 
 let shapeIdCounter = 0;
@@ -40,21 +42,37 @@ export class Editor {
     dash: 'draw',
     size: 'm',
   };
+  private readonly toolStateContext: ToolStateContext;
 
+  // Creates a new editor instance with the given options (with defaults if not provided)
   constructor(opts: EditorOptions = {}) {
     this.options = { dragDistanceSquared: opts.dragDistanceSquared ?? DRAG_DISTANCE_SQUARED };
-    const ctx: ToolStateContext = {
+    this.toolStateContext = {
       transition: (id, info) => this.tools.transition(id, info),
     };
-    this.tools.registerState(new PenIdleState(ctx, this));
-    this.tools.registerState(new PenDrawingState(ctx, this));
-    this.tools.registerState(new EraserIdleState(ctx, this));
-    this.tools.registerState(new EraserPointingState(ctx, this));
-    this.tools.registerState(new EraserErasingState(ctx, this));
-    this.tools.registerState(new SelectIdleState(ctx, this));
-    this.tools.registerState(new HandIdleState(ctx, this));
-    this.tools.registerState(new HandDraggingState(ctx, this));
-    this.tools.setCurrentTool('pen');
+    for (const defaultTool of this.getDefaultToolDefinitions()) {
+      this.registerToolDefinition(defaultTool);
+    }
+    for (const customTool of opts.toolDefinitions ?? []) {
+      this.registerToolDefinition(customTool);
+    }
+    this.tools.setCurrentTool(opts.initialToolId ?? 'pen');
+  }
+
+  registerToolDefinition(toolDefinition: ToolDefinition): void {
+    for (const stateConstructor of toolDefinition.stateConstructors) {
+      this.tools.registerState(new stateConstructor(this.toolStateContext, this));
+    }
+    this.tools.registerTool(toolDefinition.id, toolDefinition.initialStateId);
+  }
+
+  private getDefaultToolDefinitions(): ToolDefinition[] {
+    return [
+      { id: 'pen', initialStateId: PenIdleState.id, stateConstructors: [PenIdleState, PenDrawingState] },
+      { id: 'eraser', initialStateId: EraserIdleState.id, stateConstructors: [EraserIdleState, EraserPointingState, EraserErasingState] },
+      { id: 'select', initialStateId: SelectIdleState.id, stateConstructors: [SelectIdleState] },
+      { id: 'hand', initialStateId: HandIdleState.id, stateConstructors: [HandIdleState, HandDraggingState] },
+    ];
   }
 
   createShapeId(): ShapeId { return createShapeId(); }

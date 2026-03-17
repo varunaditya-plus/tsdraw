@@ -1,5 +1,6 @@
 import { DEFAULT_COLORS } from 'tsdraw-core';
 import type { ColorStyle, DashStyle, SizeStyle } from 'tsdraw-core';
+import type { CSSProperties } from 'react';
 
 const STYLE_COLORS = Object.entries(DEFAULT_COLORS)
   .filter(([key]) => key !== 'white')
@@ -10,6 +11,7 @@ const STYLE_SIZES: SizeStyle[] = ['s', 'm', 'l', 'xl'];
 
 interface StylePanelProps {
   visible: boolean;
+  style?: CSSProperties;
   drawColor: ColorStyle;
   drawDash: DashStyle;
   drawSize: SizeStyle;
@@ -20,6 +22,7 @@ interface StylePanelProps {
 
 export function StylePanel({
   visible,
+  style,
   drawColor,
   drawDash,
   drawSize,
@@ -30,7 +33,7 @@ export function StylePanel({
   if (!visible) return null;
 
   return (
-    <div className="tsdraw-style-panel" aria-label="Draw style panel">
+    <div className="tsdraw-style-panel" style={style} aria-label="Draw style panel">
       <div className="tsdraw-style-colors">
         {STYLE_COLORS.map((item) => (
           <button

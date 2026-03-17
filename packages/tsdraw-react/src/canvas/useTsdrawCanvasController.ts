@@ -15,6 +15,7 @@ import {
   getShapesInBounds,
   getTopShapeAtPoint,
   type ResizeHandle,
+  type ToolDefinition,
   type ToolId,
 } from 'tsdraw-core';
 import type { ColorStyle, DashStyle, ShapeId, SizeStyle, SelectionBounds } from 'tsdraw-core';
@@ -22,6 +23,41 @@ import { getCanvasCursor } from './cursor.js';
 import type { ScreenRect } from '../types.js';
 
 type SelectDragMode = 'none' | 'marquee' | 'move' | 'resize' | 'rotate';
+
+export interface TsdrawCursorContext {
+  currentTool: ToolId;
+  defaultCursor: string;
+  showToolOverlay: boolean;
+  isMovingSelection: boolean;
+  isResizingSelection: boolean;
+  isRotatingSelection: boolean;
+}
+
+export interface TsdrawToolOverlayState {
+  visible: boolean;
+  pointerX: number;
+  pointerY: number;
+  isPenPreview: boolean;
+  penRadius: number;
+  penColor: string;
+  eraserRadius: number;
+}
+
+export interface TsdrawMountApi {
+  editor: Editor;
+  container: HTMLDivElement;
+  canvas: HTMLCanvasElement;
+  setTool: (tool: ToolId) => void;
+  getCurrentTool: () => ToolId;
+  applyDrawStyle: (partial: Partial<{ color: ColorStyle; dash: DashStyle; size: SizeStyle }>) => void;
+}
+
+export interface UseTsdrawCanvasControllerOptions {
+  toolDefinitions?: ToolDefinition[];
+  initialTool?: ToolId;
+  stylePanelToolIds?: ToolId[];
+  onMount?: (api: TsdrawMountApi) => void | (() => void);
+}
 
 export interface TsdrawCanvasController {
   containerRef: React.RefObject<HTMLDivElement>;
@@ -35,15 +71,8 @@ export interface TsdrawCanvasController {
   selectionBounds: ScreenRect | null;
   selectionRotationDeg: number;
   canvasCursor: string;
-  toolOverlay: {
-    visible: boolean;
-    pointerX: number;
-    pointerY: number;
-    isPenPreview: boolean;
-    penRadius: number;
-    penColor: string;
-    eraserRadius: number;
-  };
+  cursorContext: TsdrawCursorContext;
+  toolOverlay: TsdrawToolOverlayState;
   showStylePanel: boolean;
   setTool: (tool: ToolId) => void;
   applyDrawStyle: (partial: Partial<{ color: ColorStyle; dash: DashStyle; size: SizeStyle }>) => void;
@@ -65,13 +94,15 @@ function resolveDrawColor(colorStyle: ColorStyle): string {
   return DEFAULT_COLORS[colorStyle] ?? colorStyle;
 }
 
-export function useTsdrawCanvasController(): TsdrawCanvasController {
+export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOptions = {}): TsdrawCanvasController {
+  const stylePanelToolIds = options.stylePanelToolIds ?? ['pen'];
+  const stylePanelToolIdsRef = useRef<ToolId[]>(stylePanelToolIds);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const editorRef = useRef<Editor | null>(null);
   const dprRef = useRef(1);
   const lastPointerClientRef = useRef<{ x: number; y: number } | null>(null);
-  const currentToolRef = useRef<ToolId>('pen');
+  const currentToolRef = useRef<ToolId>(options.initialTool ?? 'pen');
   const selectedShapeIdsRef = useRef<ShapeId[]>([]);
   const selectionRotationRef = useRef(0);
   const resizeRef = useRef<{
@@ -110,7 +141,7 @@ export function useTsdrawCanvasController(): TsdrawCanvasController {
     initialSelection: [],
   });
 
-  const [currentTool, setCurrentToolState] = useState<ToolId>('pen');
+  const [currentTool, setCurrentToolState] = useState<ToolId>(options.initialTool ?? 'pen');
   const [drawColor, setDrawColor] = useState<ColorStyle>('black');
   const [drawDash, setDrawDash] = useState<DashStyle>('draw');
   const [drawSize, setDrawSize] = useState<SizeStyle>('m');
@@ -127,6 +158,10 @@ export function useTsdrawCanvasController(): TsdrawCanvasController {
   useEffect(() => {
     currentToolRef.current = currentTool;
   }, [currentTool]);
+
+  useEffect(() => {
+    stylePanelToolIdsRef.current = stylePanelToolIds;
+  }, [stylePanelToolIds]);
 
   useEffect(() => {
     selectedShapeIdsRef.current = selectedShapeIds;
@@ -254,8 +289,19 @@ export function useTsdrawCanvasController(): TsdrawCanvasController {
     const canvas = canvasRef.current;
     if (!container || !canvas) return;
 
-    const editor = new Editor();
+    const initialTool = options.initialTool ?? 'pen';
+    const editor = new Editor({
+      toolDefinitions: options.toolDefinitions,
+      initialToolId: initialTool,
+    });
+    if (!editor.tools.hasTool(initialTool)) {
+      editor.setCurrentTool('pen');
+    }
+    
+    const activeTool = editor.getCurrentToolId();
     editorRef.current = editor;
+    setCurrentToolState(activeTool);
+    currentToolRef.current = activeTool;
 
     const initialStyle = editor.getCurrentDrawStyle();
     setDrawColor(initialStyle.color);
@@ -507,7 +553,28 @@ export function useTsdrawCanvasController(): TsdrawCanvasController {
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
 
+    const disposeMount = options.onMount?.({
+      editor,
+      container,
+      canvas,
+      setTool: (tool) => {
+        if (!editor.tools.hasTool(tool)) return;
+        editor.setCurrentTool(tool);
+        setCurrentToolState(tool);
+        currentToolRef.current = tool;
+      },
+      getCurrentTool: () => editor.getCurrentToolId(),
+      applyDrawStyle: (partial) => {
+        editor.setCurrentDrawStyle(partial);
+        if (partial.color) setDrawColor(partial.color);
+        if (partial.dash) setDrawDash(partial.dash);
+        if (partial.size) setDrawSize(partial.size);
+        render();
+      },
+    });
+
     return () => {
+      disposeMount?.();
       ro.disconnect();
       canvas.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('pointermove', handlePointerMove);
@@ -516,12 +583,21 @@ export function useTsdrawCanvasController(): TsdrawCanvasController {
       window.removeEventListener('keyup', handleKeyUp);
       editorRef.current = null;
     };
-  }, [getPagePointFromClient, refreshSelectionBounds, render, updatePointerPreview]);
+  }, [
+    getPagePointFromClient,
+    options.initialTool,
+    options.onMount,
+    options.toolDefinitions,
+    refreshSelectionBounds,
+    render,
+    updatePointerPreview,
+  ]);
 
   const setTool = useCallback(
     (tool: ToolId) => {
       const editor = editorRef.current;
       if (!editor) return;
+      if (!editor.tools.hasTool(tool)) return;
       editor.setCurrentTool(tool);
       setCurrentToolState(tool);
       currentToolRef.current = tool;
@@ -543,6 +619,31 @@ export function useTsdrawCanvasController(): TsdrawCanvasController {
     [render]
   );
 
+  const showToolOverlay = isPointerInsideCanvas && (currentTool === 'pen' || currentTool === 'eraser');
+  const canvasCursor = getCanvasCursor(currentTool, {
+    isMovingSelection,
+    isResizingSelection,
+    isRotatingSelection,
+    showToolOverlay,
+  });
+  const cursorContext: TsdrawCursorContext = {
+    currentTool,
+    defaultCursor: canvasCursor,
+    showToolOverlay,
+    isMovingSelection,
+    isResizingSelection,
+    isRotatingSelection,
+  };
+  const toolOverlay: TsdrawToolOverlayState = {
+    visible: showToolOverlay,
+    pointerX: pointerScreenPoint.x,
+    pointerY: pointerScreenPoint.y,
+    isPenPreview: currentTool === 'pen',
+    penRadius: Math.max(2, STROKE_WIDTHS[drawSize] / 2),
+    penColor: resolveDrawColor(drawColor),
+    eraserRadius: ERASER_MARGIN,
+  };
+
   return {
     containerRef,
     canvasRef,
@@ -554,22 +655,10 @@ export function useTsdrawCanvasController(): TsdrawCanvasController {
     selectionBrush,
     selectionBounds,
     selectionRotationDeg,
-    canvasCursor: getCanvasCursor(currentTool, {
-      isMovingSelection,
-      isResizingSelection,
-      isRotatingSelection,
-      showToolOverlay: isPointerInsideCanvas && (currentTool === 'pen' || currentTool === 'eraser'),
-    }),
-    toolOverlay: {
-      visible: isPointerInsideCanvas && (currentTool === 'pen' || currentTool === 'eraser'),
-      pointerX: pointerScreenPoint.x,
-      pointerY: pointerScreenPoint.y,
-      isPenPreview: currentTool === 'pen',
-      penRadius: Math.max(2, STROKE_WIDTHS[drawSize] / 2),
-      penColor: resolveDrawColor(drawColor),
-      eraserRadius: ERASER_MARGIN,
-    },
-    showStylePanel: currentTool === 'pen',
+    canvasCursor,
+    cursorContext,
+    toolOverlay,
+    showStylePanel: stylePanelToolIdsRef.current.includes(currentTool),
     setTool,
     applyDrawStyle,
     handleResizePointerDown,

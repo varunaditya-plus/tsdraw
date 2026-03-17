@@ -15,9 +15,6 @@
 
 .tsdraw-toolbar {
   position: absolute;
-  left: 50%;
-  bottom: 16px;
-  transform: translateX(-50%);
   display: flex;
   gap: 2px;
   padding: 4px;
@@ -64,8 +61,6 @@
 
 .tsdraw-style-panel {
   position: absolute;
-  top: 8px;
-  right: 8px;
   width: 148px;
   background: var(--tsdraw-color-panel);
   border: 1px solid var(--tsdraw-color-border);

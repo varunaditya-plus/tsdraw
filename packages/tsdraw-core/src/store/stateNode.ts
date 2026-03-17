@@ -21,6 +21,11 @@ export interface ToolStateContext {
   transition(stateId: string, info?: ToolStateTransitionInfo): void;
 }
 
+export interface StateNodeConstructor {
+  id: string;
+  new (ctx: ToolStateContext, editor: IEditor): StateNode;
+}
+
 // State node in the tool state machine
 export abstract class StateNode {
   static id: string = 'base';
