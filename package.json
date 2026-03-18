@@ -21,11 +21,11 @@
     "build": "npm run build --workspaces --if-present",
     "build:core": "npm run build -w packages/tsdraw-core",
     "build:react": "npm run build -w packages/tsdraw-react",
-    "build:demo": "npm run build -w apps/demo",
     "dev": "npm run dev -w apps/demo",
+    "dev:learning": "npm run dev -w apps/learning_demo",
     "publish:changed": "node ./scripts/publish-if-needed.mjs",
     "test": "npm run test --workspaces --if-present",
-    "lint": "eslint packages/tsdraw-core/src packages/tsdraw-react/src apps/demo/src --max-warnings 0",
+    "lint": "eslint packages/tsdraw-core/src packages/tsdraw-react/src apps/demo/src apps/learning_demo/src --max-warnings 0",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
