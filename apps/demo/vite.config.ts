@@ -7,11 +7,11 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: 'tsdraw/tsdraw.css',
+        find: '@tsdraw/react/tsdraw.css',
         replacement: fileURLToPath(new URL('../../packages/tsdraw-react/src/styles/tsdraw.css', import.meta.url)),
       },
       {
-        find: /^tsdraw$/,
+        find: /^@tsdraw\/react$/,
         replacement: fileURLToPath(new URL('../../packages/tsdraw-react/src/index.ts', import.meta.url)),
       },
       {

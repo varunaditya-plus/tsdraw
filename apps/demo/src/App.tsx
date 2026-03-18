@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import { Tsdraw, type TsdrawCustomTool, type TsdrawCustomElement } from 'tsdraw';
+import { Tsdraw, type TsdrawCustomTool, type TsdrawCustomElement } from '@tsdraw/react';
 import { DEFAULT_COLORS, type ColorStyle, type DashStyle, type SizeStyle } from '@tsdraw/core';
 import Confetti from 'react-confetti-boom';
 import { IconStar, IconStarFilled } from '@tabler/icons-react';

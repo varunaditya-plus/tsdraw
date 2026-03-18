@@ -33,7 +33,9 @@ jobs:
         run: npm install --include=optional
 
       - name: Install Rollup Linux binary
-        run: npm install --no-save "@rollup/rollup-linux-x64-gnu@$(node -p 'require(\"./node_modules/rollup/package.json\").version')"
+        run: |
+          ROLLUP_VERSION=$(node -p 'require("./node_modules/rollup/package.json").version')
+          npm install --no-save "@rollup/rollup-linux-x64-gnu@$ROLLUP_VERSION"
 
       - name: Build packages
         run: npm run build:core && npm run build:react

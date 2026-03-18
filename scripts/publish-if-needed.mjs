@@ -72,7 +72,7 @@ function getPublishedVersion(packageName) {
   }
 }
 
-function publishWorkspace(workspace) {
+function publishWorkspace(workspace, packageName, packageVersion) {
   const publishArgs = ['publish', '--workspace', workspace, '--access', 'public', '--provenance'];
 
   if (isDryRun) {
@@ -80,11 +80,27 @@ function publishWorkspace(workspace) {
     return;
   }
 
-  execFileSync('npm', publishArgs, {
-    cwd: repoRoot,
-    stdio: 'inherit',
-    env: process.env,
-  });
+  try {
+    execFileSync('npm', publishArgs, {
+      cwd: repoRoot,
+      stdio: 'inherit',
+      env: process.env,
+    });
+  } catch (error) {
+    const stderr = error instanceof Error && 'stderr' in error ? String(error.stderr) : '';
+    const stdout = error instanceof Error && 'stdout' in error ? String(error.stdout) : '';
+    const combinedOutput = `${stdout}\n${stderr}`;
+
+    if (
+      combinedOutput.includes('cannot publish over the previously published versions') ||
+      combinedOutput.includes('You cannot publish over the previously published version')
+    ) {
+      console.log(`${packageName}@${packageVersion} is already published. Skipping.`);
+      return;
+    }
+
+    throw error;
+  }
 }
 
 const corePackageJson = readJson('packages/tsdraw-core/package.json');
@@ -93,7 +109,7 @@ const reactCoreDependency = reactPackageJson.dependencies?.['@tsdraw/core'];
 
 if (reactCoreDependency !== corePackageJson.version) {
   throw new Error(
-    `tsdraw depends on @tsdraw/core@${reactCoreDependency}, but packages/tsdraw-core is version ${corePackageJson.version}. Keep them in sync before publishing.`
+    `@tsdraw/react depends on @tsdraw/core@${reactCoreDependency}, but packages/tsdraw-core is version ${corePackageJson.version}. Keep them in sync before publishing.`
   );
 }
 
@@ -105,7 +121,7 @@ for (const target of publishTargets) {
 
   if (!publishedVersion) {
     console.log(`${localName}@${localVersion} has not been published yet.`);
-    publishWorkspace(target.workspace);
+    publishWorkspace(target.workspace, localName, localVersion);
     continue;
   }
 
@@ -123,5 +139,5 @@ for (const target of publishTargets) {
   }
 
   console.log(`${localName} will publish ${publishedVersion} -> ${localVersion}.`);
-  publishWorkspace(target.workspace);
+  publishWorkspace(target.workspace, localName, localVersion);
 }
