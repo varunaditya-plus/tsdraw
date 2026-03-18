@@ -5,6 +5,10 @@
 	</picture>
 </div>
 
+<p align="center">
+  <img alt="tsdraw demo" src="https://github.com/varunaditya-plus/tsdraw/raw/main/assets/demo.png" />
+</p>
+
 <h3 align="center">
   Easily create infinite canvas apps in React with tsdraw<br>
   <sub><sup>(inspired by excalidraw and tldraw)</sup></sub>
