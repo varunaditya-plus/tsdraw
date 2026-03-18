@@ -92,7 +92,6 @@
 
 .tsdraw-style-panel {
   position: absolute;
-  width: 148px;
   background: var(--tsdraw-color-panel);
   border: 1px solid var(--tsdraw-color-border);
   border-radius: var(--tsdraw-radius);
