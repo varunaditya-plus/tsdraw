@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import {
   Editor,
-  DEFAULT_COLORS,
   ERASER_MARGIN,
   STROKE_WIDTHS,
   normalizeSelectionBounds,
@@ -14,11 +13,12 @@ import {
   getSelectionBoundsPage,
   getShapesInBounds,
   getTopShapeAtPoint,
+  resolveThemeColor,
   type ResizeHandle,
   type ToolDefinition,
   type ToolId,
-} from 'tsdraw-core';
-import type { ColorStyle, DashStyle, ShapeId, SizeStyle, SelectionBounds } from 'tsdraw-core';
+} from '@tsdraw/core';
+import type { ColorStyle, DashStyle, ShapeId, SizeStyle, SelectionBounds } from '@tsdraw/core';
 import { getCanvasCursor } from './cursor.js';
 import type { ScreenRect } from '../types.js';
 
@@ -55,6 +55,7 @@ export interface TsdrawMountApi {
 export interface UseTsdrawCanvasControllerOptions {
   toolDefinitions?: ToolDefinition[];
   initialTool?: ToolId;
+  theme?: 'light' | 'dark';
   stylePanelToolIds?: ToolId[];
   onMount?: (api: TsdrawMountApi) => void | (() => void);
 }
@@ -90,8 +91,8 @@ function toScreenRect(editor: Editor, bounds: SelectionBounds): ScreenRect {
   };
 }
 
-function resolveDrawColor(colorStyle: ColorStyle): string {
-  return DEFAULT_COLORS[colorStyle] ?? colorStyle;
+function resolveDrawColor(colorStyle: ColorStyle, theme: 'light' | 'dark'): string {
+  return resolveThemeColor(colorStyle, theme);
 }
 
 export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOptions = {}): TsdrawCanvasController {
@@ -294,6 +295,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
       toolDefinitions: options.toolDefinitions,
       initialToolId: initialTool,
     });
+    editor.renderer.setTheme(options.theme ?? 'light');
     if (!editor.tools.hasTool(initialTool)) {
       editor.setCurrentTool('pen');
     }
@@ -593,6 +595,13 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     updatePointerPreview,
   ]);
 
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.renderer.setTheme(options.theme ?? 'light');
+    render();
+  }, [options.theme, render]);
+
   const setTool = useCallback(
     (tool: ToolId) => {
       const editor = editorRef.current;
@@ -640,7 +649,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     pointerY: pointerScreenPoint.y,
     isPenPreview: currentTool === 'pen',
     penRadius: Math.max(2, STROKE_WIDTHS[drawSize] / 2),
-    penColor: resolveDrawColor(drawColor),
+    penColor: resolveDrawColor(drawColor, options.theme ?? 'light'),
     eraserRadius: ERASER_MARGIN,
   };
 

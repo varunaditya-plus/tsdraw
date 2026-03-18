@@ -1,5 +1,5 @@
-import type { ToolId } from 'tsdraw-core';
-import { isSelectTool } from 'tsdraw-core';
+import type { ToolId } from '@tsdraw/core';
+import { isSelectTool } from '@tsdraw/core';
 
 export function getCanvasCursor(
   currentTool: ToolId,

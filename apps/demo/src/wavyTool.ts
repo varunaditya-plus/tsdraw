@@ -5,8 +5,8 @@ import {
   type DrawShape,
   type ShapeId,
   type Vec3,
-} from 'tsdraw-core';
-import { encodePoints, decodePoints } from 'tsdraw-core';
+} from '@tsdraw/core';
+import { encodePoints, decodePoints } from '@tsdraw/core';
 
 // This is an example showing how to build a custom tool using the tool state machine
 // It's super customizable and you can basically build any tool you might need

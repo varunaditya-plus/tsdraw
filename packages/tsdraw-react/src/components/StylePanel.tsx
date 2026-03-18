@@ -1,10 +1,10 @@
-import { DEFAULT_COLORS } from 'tsdraw-core';
-import type { ColorStyle, DashStyle, SizeStyle } from 'tsdraw-core';
+import { DEFAULT_COLORS, resolveThemeColor } from '@tsdraw/core';
+import type { ColorStyle, DashStyle, SizeStyle } from '@tsdraw/core';
 import type { CSSProperties } from 'react';
 
 const STYLE_COLORS = Object.entries(DEFAULT_COLORS)
   .filter(([key]) => key !== 'white')
-  .map(([value, solid]) => ({ value, solid }));
+  .map(([value]) => ({ value }));
 
 const STYLE_DASHES: DashStyle[] = ['draw', 'solid', 'dashed', 'dotted'];
 const STYLE_SIZES: SizeStyle[] = ['s', 'm', 'l', 'xl'];
@@ -12,6 +12,7 @@ const STYLE_SIZES: SizeStyle[] = ['s', 'm', 'l', 'xl'];
 interface StylePanelProps {
   visible: boolean;
   style?: CSSProperties;
+  theme: 'light' | 'dark';
   drawColor: ColorStyle;
   drawDash: DashStyle;
   drawSize: SizeStyle;
@@ -23,6 +24,7 @@ interface StylePanelProps {
 export function StylePanel({
   visible,
   style,
+  theme,
   drawColor,
   drawDash,
   drawSize,
@@ -47,7 +49,7 @@ export function StylePanel({
           >
             <span
               className="tsdraw-style-color-dot"
-              style={{ background: item.solid }}
+              style={{ background: resolveThemeColor(item.value, theme) }}
             />
           </button>
         ))}

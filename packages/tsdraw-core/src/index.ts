@@ -25,3 +25,4 @@ export * from './tools/hand/states/HandDraggingState.js';
 
 export * from './utils/pathCodec.js';
 export * from './utils/geometry.js';
+export * from './utils/colors.js';

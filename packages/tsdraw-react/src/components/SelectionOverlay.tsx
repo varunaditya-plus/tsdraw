@@ -1,5 +1,5 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
-import type { ResizeHandle, ToolId } from 'tsdraw-core';
+import type { ResizeHandle, ToolId } from '@tsdraw/core';
 import type { ScreenRect } from '../types.js';
 
 interface SelectionOverlayProps {

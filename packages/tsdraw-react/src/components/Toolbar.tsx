@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import type { ToolId } from 'tsdraw-core';
+import type { ToolId } from '@tsdraw/core';
 import { IconEraser, IconHandStop, IconPencil, IconPointer } from '@tabler/icons-react';
 
 export interface ToolbarItem {

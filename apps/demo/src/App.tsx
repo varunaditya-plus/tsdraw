@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client';
-import { Tsdraw, type TsdrawCustomTool, type TsdrawCustomElement } from 'tsdraw-react';
-import { DEFAULT_COLORS, type ColorStyle, type DashStyle, type SizeStyle } from 'tsdraw-core';
+import { Tsdraw, type TsdrawCustomTool, type TsdrawCustomElement } from 'tsdraw';
+import { DEFAULT_COLORS, type ColorStyle, type DashStyle, type SizeStyle } from '@tsdraw/core';
 import Confetti from 'react-confetti-boom';
 import { IconStar, IconStarFilled } from '@tabler/icons-react';
 import { wavyToolDefinition } from './wavyTool.js';
@@ -69,6 +69,7 @@ export function App() {
       <Tsdraw
         width="100%"
         height="100%"
+        theme="light"
         tools={['select', 'pen', wavyTool, 'eraser', 'hand']}
         initialToolId="pen"
         uiOptions={{

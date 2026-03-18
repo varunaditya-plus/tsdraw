@@ -1,16 +1,47 @@
 /* tsdraw React UI - inspired by a certain someone */
 
-.tsdraw-container {
+.tsdraw {
   --tsdraw-color-bg: #fafafa;
   --tsdraw-color-panel: #ffffff;
   --tsdraw-color-muted: #ececec;
   --tsdraw-color-selected: #111111;
+  --tsdraw-color-selected-text: #ffffff;
   --tsdraw-color-border: #d7d7d7;
   --tsdraw-color-text: #1f1f1f;
+  --tsdraw-color-active-surface: #e7e7e7;
+  --tsdraw-color-preview: #1d1d1d;
+  --tsdraw-color-panel-highlight: rgba(255, 255, 255, 0.85);
+  --tsdraw-color-panel-shadow: rgba(0, 0, 0, 0.14);
+  --tsdraw-color-panel-shadow-strong: rgba(0, 0, 0, 0.12);
+  --tsdraw-color-selection-contrast: rgba(255, 255, 255, 0.9);
+  --tsdraw-color-handle-fill: #ffffff;
+  --tsdraw-color-tool-dot-outline: rgba(255, 255, 255, 0.4);
+  --tsdraw-color-tool-ring-border: rgba(24, 24, 24, 0.85);
+  --tsdraw-color-tool-ring-fill: rgba(24, 24, 24, 0.08);
   --tsdraw-radius: 12px;
   font-family: system-ui, sans-serif;
   background: var(--tsdraw-color-bg);
   overflow: hidden;
+}
+
+.tsdraw.tsdraw-darkmode {
+  --tsdraw-color-bg: #111317;
+  --tsdraw-color-panel: #1a1d23;
+  --tsdraw-color-muted: #262b33;
+  --tsdraw-color-selected: #f5f7fb;
+  --tsdraw-color-selected-text: #111317;
+  --tsdraw-color-border: #303641;
+  --tsdraw-color-text: #eef2f7;
+  --tsdraw-color-active-surface: #2c323c;
+  --tsdraw-color-preview: #eef2f7;
+  --tsdraw-color-panel-highlight: rgba(255, 255, 255, 0.06);
+  --tsdraw-color-panel-shadow: rgba(0, 0, 0, 0.35);
+  --tsdraw-color-panel-shadow-strong: rgba(0, 0, 0, 0.28);
+  --tsdraw-color-selection-contrast: rgba(255, 255, 255, 0.15);
+  --tsdraw-color-handle-fill: #1a1d23;
+  --tsdraw-color-tool-dot-outline: rgba(255, 255, 255, 0.2);
+  --tsdraw-color-tool-ring-border: rgba(255, 255, 255, 0.75);
+  --tsdraw-color-tool-ring-fill: rgba(255, 255, 255, 0.08);
 }
 
 .tsdraw-toolbar {
@@ -21,7 +52,7 @@
   background: var(--tsdraw-color-panel);
   border-radius: var(--tsdraw-radius);
   border: 1px solid var(--tsdraw-color-border);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.85) inset, 0 6px 18px rgba(0, 0, 0, 0.14);
+  box-shadow: 0 1px 0 var(--tsdraw-color-panel-highlight) inset, 0 6px 18px var(--tsdraw-color-panel-shadow);
   z-index: 100;
   pointer-events: all;
 }
@@ -42,7 +73,7 @@
 .tsdraw-toolbar button[data-active="true"],
 .tsdraw-toolbar .tsdraw-toolbar-btn[data-active="true"] {
   background: var(--tsdraw-color-selected);
-  color: white;
+  color: var(--tsdraw-color-selected-text);
 }
 
 .tsdraw-toolbar-btn {
@@ -65,7 +96,7 @@
   background: var(--tsdraw-color-panel);
   border: 1px solid var(--tsdraw-color-border);
   border-radius: var(--tsdraw-radius);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8px 24px var(--tsdraw-color-panel-shadow-strong);
   color: var(--tsdraw-color-text);
   overflow: hidden;
   pointer-events: all;
@@ -97,14 +128,14 @@
 
 .tsdraw-style-color[data-active="true"],
 .tsdraw-style-row[data-active="true"] {
-  background: #e7e7e7;
+  background: var(--tsdraw-color-active-surface);
 }
 
 .tsdraw-style-color-dot {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--tsdraw-color-border);
 }
 
 .tsdraw-style-row {
@@ -138,7 +169,7 @@
   width: 24px;
   height: 2px;
   border-radius: 999px;
-  background: #1d1d1d;
+  background: var(--tsdraw-color-preview);
 }
 
 .tsdraw-style-preview-line--draw {
@@ -150,6 +181,10 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='10' viewBox='0 0 12 10'%3E%3Cpath d='M0 5 C2 1 4 9 6 5 C8 1 10 9 12 5' stroke='%231d1d1d' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 
+.tsdraw.tsdraw-darkmode .tsdraw-style-preview-line--draw {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='10' viewBox='0 0 12 10'%3E%3Cpath d='M0 5 C2 1 4 9 6 5 C8 1 10 9 12 5' stroke='%23eef2f7' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
 .tsdraw-style-preview-line--solid {
   border-radius: 999px;
 }
@@ -157,7 +192,7 @@
 .tsdraw-style-preview-line--dashed {
   background: repeating-linear-gradient(
     90deg,
-    #1d1d1d 0 6px,
+    var(--tsdraw-color-preview) 0 6px,
     transparent 6px 10px
   );
 }
@@ -166,7 +201,7 @@
   height: 4px;
   background: repeating-radial-gradient(
     circle at 2px 2px,
-    #1d1d1d 0 1.5px,
+    var(--tsdraw-color-preview) 0 1.5px,
     transparent 1.5px 6px
   );
   background-size: 6px 4px;
@@ -175,7 +210,7 @@
 .tsdraw-style-size {
   width: 24px;
   border-radius: 999px;
-  background: #1d1d1d;
+  background: var(--tsdraw-color-preview);
 }
 
 .tsdraw-style-size--s {
@@ -213,7 +248,7 @@
   position: absolute;
   inset: 0;
   border: 1px solid #4465e9;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9) inset;
+  box-shadow: 0 0 0 1px var(--tsdraw-color-selection-contrast) inset;
   pointer-events: none;
   z-index: 1;
 }
@@ -223,7 +258,7 @@
   width: 10px;
   height: 10px;
   border: 1px solid #4465e9;
-  background: #ffffff;
+  background: var(--tsdraw-color-handle-fill);
   transform: translate(-50%, -50%);
   border-radius: 2px;
   padding: 0;
@@ -256,7 +291,7 @@
   width: 10px;
   height: 10px;
   border: 1px solid #4465e9;
-  background: #ffffff;
+  background: var(--tsdraw-color-handle-fill);
   transform: translate(-50%, -50%);
   border-radius: 2px;
   padding: 0;
@@ -281,10 +316,10 @@
 }
 
 .tsdraw-tool-dot {
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 0 1px var(--tsdraw-color-tool-dot-outline);
 }
 
 .tsdraw-tool-ring {
-  border: 1.5px solid rgba(24, 24, 24, 0.85);
-  background: rgba(24, 24, 24, 0.08);
+  border: 1.5px solid var(--tsdraw-color-tool-ring-border);
+  background: var(--tsdraw-color-tool-ring-fill);
 }

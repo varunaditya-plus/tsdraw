@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import type { ColorStyle, DashStyle, DefaultToolId, SizeStyle, ToolDefinition, ToolId } from 'tsdraw-core';
+import type { ColorStyle, DashStyle, DefaultToolId, SizeStyle, ToolDefinition, ToolId } from '@tsdraw/core';
 import { SelectionOverlay } from './SelectionOverlay.js';
 import { StylePanel } from './StylePanel.js';
 import { ToolOverlay } from './ToolOverlay.js';
@@ -91,6 +91,7 @@ export interface TsdrawProps {
   height?: number | string;
   className?: string;
   style?: CSSProperties;
+  theme?: 'light' | 'dark' | 'system';
   tools?: TsdrawToolItem[];
   initialToolId?: ToolId;
   uiOptions?: TsdrawUiOptions;
@@ -146,6 +147,10 @@ function resolvePlacementStyle(
 }
 
 export function Tsdraw(props: TsdrawProps) {
+  const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window === 'undefined') return 'light';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
   const toolItems = props.tools ?? DEFAULT_TOOL_IDS;
   const customTools = useMemo(
     () => toolItems.filter(isCustomTool),
@@ -184,6 +189,22 @@ export function Tsdraw(props: TsdrawProps) {
     [toolItems]
   );
   const initialTool: ToolId = props.initialToolId ?? toolbarItems[0]?.id ?? 'pen';
+  const requestedTheme = props.theme ?? 'light';
+
+  // Themes and so that system theme works
+  useEffect(() => {
+    if (requestedTheme !== 'system' || typeof window === 'undefined') return;
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const syncSystemTheme = () => setSystemTheme(mediaQuery.matches ? 'dark' : 'light');
+
+    syncSystemTheme();
+    mediaQuery.addEventListener('change', syncSystemTheme);
+
+    return () => mediaQuery.removeEventListener('change', syncSystemTheme);
+  }, [requestedTheme]);
+
+  const resolvedTheme = requestedTheme === 'system' ? systemTheme : requestedTheme;
 
   const {
     containerRef,
@@ -207,6 +228,7 @@ export function Tsdraw(props: TsdrawProps) {
   } = useTsdrawCanvasController({
     toolDefinitions,
     initialTool,
+    theme: resolvedTheme,
     stylePanelToolIds,
     onMount: props.onMount,
   });
@@ -231,7 +253,7 @@ export function Tsdraw(props: TsdrawProps) {
   return (
     <div
       ref={containerRef}
-      className={`tsdraw-container ${props.className ?? ''}`}
+      className={`tsdraw tsdraw-${resolvedTheme}mode ${props.className ?? ''}`}
       style={{
         width: props.width ?? '100%',
         height: props.height ?? '100%',
@@ -264,6 +286,7 @@ export function Tsdraw(props: TsdrawProps) {
       <StylePanel
         visible={showStylePanel}
         style={stylePanelPlacementStyle}
+        theme={resolvedTheme}
         drawColor={drawColor}
         drawDash={drawDash}
         drawSize={drawSize}

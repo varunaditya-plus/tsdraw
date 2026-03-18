@@ -1,12 +1,12 @@
 <div alt style="text-align: center; transform: scale(.25);">
 	<picture>
-		<source media="(prefers-color-scheme: dark)" srcset="https://github.com/varunaditya-plus/tsdraw/raw/main/assets/hero-dark.png" />
-		<img alt="tsdraw" src="https://github.com/varunaditya-plus/tsdraw/raw/main/assets/hero-light.png" />
+		<source media="(prefers-color-scheme: dark)" srcset="https://github.com/tsdraw/tsdraw/raw/main/assets/hero-dark.png" />
+		<img alt="tsdraw" src="https://github.com/tsdraw/tsdraw/raw/main/assets/hero-light.png" />
 	</picture>
 </div>
 
 <p align="center">
-  <img alt="tsdraw demo" src="https://github.com/varunaditya-plus/tsdraw/raw/main/assets/demo.png" />
+  <img alt="tsdraw demo" src="https://github.com/tsdraw/tsdraw/raw/main/assets/demo.png" />
 </p>
 
 <h3 align="center">

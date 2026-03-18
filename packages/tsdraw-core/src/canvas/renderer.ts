@@ -1,12 +1,9 @@
 import type { Viewport } from './viewport.js';
 import type { Shape, DrawShape } from '../types.js';
-import { STROKE_WIDTHS, DEFAULT_COLORS } from '../types.js';
+import { STROKE_WIDTHS } from '../types.js';
 import { decodePoints } from '../utils/pathCodec.js';
+import { resolveThemeColor, type TsdrawRenderTheme } from '../utils/colors.js';
 import { getStroke } from 'perfect-freehand';
-
-function resolveColor(color: string): string {
-  return DEFAULT_COLORS[color] ?? color;
-}
 
 // Renderer interface: renders shapes given 2d canvas context and viewport
 export interface ICanvasRenderer {
@@ -15,6 +12,12 @@ export interface ICanvasRenderer {
 
 // Default canvas renderer: draws shapes using (optionally) pressure-based width for ipads and whatnot
 export class CanvasRenderer implements ICanvasRenderer {
+  private theme: TsdrawRenderTheme = 'light';
+
+  setTheme(theme: TsdrawRenderTheme): void {
+    this.theme = theme;
+  }
+
   render(ctx: CanvasRenderingContext2D, viewport: Viewport, shapes: Shape[]): void {
     ctx.save();
     ctx.translate(viewport.x, viewport.y);
@@ -31,7 +34,7 @@ export class CanvasRenderer implements ICanvasRenderer {
     const width = (STROKE_WIDTHS[shape.props.size] ?? 3.5) * shape.props.scale;
     const samples = flattenSegments(shape);
     if (samples.length === 0) return;
-    const color = resolveColor(shape.props.color);
+    const color = resolveThemeColor(shape.props.color, this.theme);
 
     if (shape.props.dash !== 'draw') {
       this.paintDashedStroke(ctx, samples, width, color, shape.props.dash);

@@ -3,6 +3,14 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@tsdraw/core": ["packages/tsdraw-core/src/index.ts"],
+      "@tsdraw/core/*": ["packages/tsdraw-core/src/*"],
+      "tsdraw": ["packages/tsdraw-react/src/index.ts"],
+      "tsdraw/tsdraw.css": ["packages/tsdraw-react/src/styles/tsdraw.css"],
+      "tsdraw/*": ["packages/tsdraw-react/src/*"]
+    },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,
     "noEmit": true,
