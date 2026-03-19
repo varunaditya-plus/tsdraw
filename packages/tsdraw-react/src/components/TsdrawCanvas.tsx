@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import type { ColorStyle, DashStyle, DefaultToolId, SizeStyle, ToolDefinition, ToolId } from '@tsdraw/core';
 import { SelectionOverlay } from './SelectionOverlay.js';
@@ -13,6 +13,8 @@ import {
 } from '../canvas/useTsdrawCanvasController.js';
 
 const DEFAULT_TOOLBAR_PARTS: ToolbarPartItem[][] = [['undo', 'redo'], ['select', 'hand', 'pen', 'eraser']];
+const EMPTY_CUSTOM_TOOLS: TsdrawCustomTool[] = [];
+const EMPTY_CUSTOM_ELEMENTS: TsdrawCustomElement[] = [];
 
 const DEFAULT_TOOL_LABELS: Record<DefaultToolId, string> = {
   select: 'Select',
@@ -142,7 +144,7 @@ function resolvePlacementStyle(
 
   if (transforms.length > 0) result.transform = transforms.join(' ');
 
-  return { ...result, ...(placement?.style ?? {}) };
+  return placement?.style ? { ...result, ...placement.style } : result;
 }
 
 export function Tsdraw(props: TsdrawProps) {
@@ -150,7 +152,7 @@ export function Tsdraw(props: TsdrawProps) {
     if (typeof window === 'undefined') return 'light';
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
-  const customTools = props.customTools ?? [];
+  const customTools = props.customTools ?? EMPTY_CUSTOM_TOOLS;
   const toolbarPartIds = props.uiOptions?.toolbar?.parts ?? DEFAULT_TOOLBAR_PARTS;
   const customToolMap = useMemo(
     () => new Map(customTools.map((customTool) => [customTool.id, customTool])),
@@ -264,7 +266,16 @@ export function Tsdraw(props: TsdrawProps) {
     />
   );
   const overlayNode = props.uiOptions?.overlays?.renderToolOverlay?.({ defaultOverlay: defaultToolOverlay, overlayState: toolOverlay, currentTool }) ?? defaultToolOverlay;
-  const customElements = props.uiOptions?.customElements ?? [];
+  const customElements = props.uiOptions?.customElements ?? EMPTY_CUSTOM_ELEMENTS;
+  const onColorSelect = useCallback((color: ColorStyle) => {
+    applyDrawStyle({ color });
+  }, [applyDrawStyle]);
+  const onDashSelect = useCallback((dash: DashStyle) => {
+    applyDrawStyle({ dash });
+  }, [applyDrawStyle]);
+  const onSizeSelect = useCallback((size: SizeStyle) => {
+    applyDrawStyle({ size });
+  }, [applyDrawStyle]);
   const toolbarParts = useMemo<ToolbarPart[]>(
     () =>
       toolbarPartIds
@@ -359,9 +370,9 @@ export function Tsdraw(props: TsdrawProps) {
         drawColor={drawColor}
         drawDash={drawDash}
         drawSize={drawSize}
-        onColorSelect={(color) => applyDrawStyle({ color })}
-        onDashSelect={(dash) => applyDrawStyle({ dash })}
-        onSizeSelect={(size) => applyDrawStyle({ size })}
+        onColorSelect={onColorSelect}
+        onDashSelect={onDashSelect}
+        onSizeSelect={onSizeSelect}
       />
       {customElements.map((customElement) => (
         <div

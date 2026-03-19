@@ -111,6 +111,7 @@ function resolveDrawColor(colorStyle: ColorStyle, theme: 'light' | 'dark'): stri
 export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOptions = {}): TsdrawCanvasController {
   const stylePanelToolIds = options.stylePanelToolIds ?? ['pen'];
   const stylePanelToolIdsRef = useRef<ToolId[]>(stylePanelToolIds);
+  const onMountRef = useRef(options.onMount);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const editorRef = useRef<Editor | null>(null);
@@ -182,6 +183,10 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
   useEffect(() => {
     stylePanelToolIdsRef.current = stylePanelToolIds;
   }, [stylePanelToolIds]);
+
+  useEffect(() => {
+    onMountRef.current = options.onMount;
+  }, [options.onMount]);
 
   useEffect(() => {
     selectedShapeIdsRef.current = selectedShapeIds;
@@ -494,7 +499,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
           additive: first.shiftKey,
           initialSelection: [...selectedShapeIdsRef.current],
         };
-        setSelectionBrush({ left: e.offsetX, top: e.offsetY, width: 0, height: 0 });
+        setSelectionBrush(toScreenRect(editor, { minX: x, minY: y, maxX: x, maxY: y }));
         if (!e.shiftKey) {
           setSelectedShapeIds([]);
           selectedShapeIdsRef.current = [];
@@ -673,6 +678,38 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
       editor.endHistoryEntry();
     };
 
+    const handlePointerCancel = () => {
+      if (!isPointerActiveRef.current) return;
+      isPointerActiveRef.current = false;
+      lastPointerClientRef.current = null;
+      editor.input.pointerUp();
+
+      if (currentToolRef.current === 'select') {
+        const drag = selectDragRef.current;
+        if (drag.mode === 'rotate') setIsRotatingSelection(false);
+        if (drag.mode === 'resize') setIsResizingSelection(false);
+        if (drag.mode === 'move') setIsMovingSelection(false);
+        if (drag.mode === 'marquee') setSelectionBrush(null);
+        if (drag.mode !== 'none') {
+          selectDragRef.current.mode = 'none';
+          render();
+          refreshSelectionBounds(editor);
+        }
+        editor.endHistoryEntry();
+      } else {
+        editor.tools.pointerUp();
+        render();
+        refreshSelectionBounds(editor);
+        editor.endHistoryEntry();
+      }
+
+      if (pendingRemoteDocumentRef.current) {
+        const pending = pendingRemoteDocumentRef.current;
+        pendingRemoteDocumentRef.current = null;
+        applyRemoteDocumentSnapshot(pending);
+      }
+    };
+
     // undo/redo keybinds
     const handleKeyDown = (e: KeyboardEvent) => {
       const isMetaPressed = e.metaKey || e.ctrlKey;
@@ -723,22 +760,42 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
         editor.loadHistorySnapshot(loaded.history);
         syncHistoryState();
 
+        if (disposed) return;
         persistenceActive = true;
-        persistenceChannel = new BroadcastChannel(`tsdraw:persistence:${persistenceKey}`);
-        persistenceChannel.onmessage = async (event) => {
-          const data = event.data as { type?: string; senderSessionId?: string };
-          if (data?.type !== 'tsdraw:persisted' || data.senderSessionId === sessionId) return;
-          if (!persistenceDb || disposed) return;
-          const nextLoaded = await persistenceDb.load(sessionId);
-          if (nextLoaded.records.length > 0) {
-            const nextDocument: TsdrawDocumentSnapshot = { records: nextLoaded.records };
-            if (isPointerActiveRef.current) {
-              pendingRemoteDocumentRef.current = nextDocument;
+        if (typeof BroadcastChannel !== 'undefined') {
+          persistenceChannel = new BroadcastChannel(`tsdraw:persistence:${persistenceKey}`);
+          let isLoadingRemote = false;
+          let pendingRemoteLoad = false;
+          persistenceChannel.onmessage = () => {
+            if (disposed) return;
+            if (isLoadingRemote) {
+              pendingRemoteLoad = true;
               return;
             }
-            applyRemoteDocumentSnapshot(nextDocument);
-          }
-        };
+            isLoadingRemote = true;
+            const processLoad = async () => {
+              try {
+                do {
+                  pendingRemoteLoad = false;
+                  if (!persistenceDb || disposed) return;
+                  const nextLoaded = await persistenceDb.load(sessionId);
+                  if (disposed) return;
+                  if (nextLoaded.records.length > 0) {
+                    const nextDocument: TsdrawDocumentSnapshot = { records: nextLoaded.records };
+                    if (isPointerActiveRef.current) {
+                      pendingRemoteDocumentRef.current = nextDocument;
+                      return;
+                    }
+                    applyRemoteDocumentSnapshot(nextDocument);
+                  }
+                } while (pendingRemoteLoad && !disposed);
+              } finally {
+                isLoadingRemote = false;
+              }
+            };
+            void processLoad();
+          };
+        }
       } finally {
         if (!disposed) { setIsPersistenceReady(true); }
       }
@@ -760,6 +817,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     canvas.addEventListener('pointerdown', handlePointerDown);
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerCancel);
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
 
@@ -767,7 +825,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
       console.error('failed to initialize tsdraw persistence', error);
     });
 
-    disposeMount = options.onMount?.({
+    disposeMount = onMountRef.current?.({
       editor,
       container,
       canvas,
@@ -817,6 +875,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
       canvas.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       isPointerActiveRef.current = false;
@@ -828,7 +887,6 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
   }, [
     getPagePointFromClient,
     options.initialTool,
-    options.onMount,
     options.persistenceKey,
     options.toolDefinitions,
     refreshSelectionBounds,

@@ -8,15 +8,15 @@ export default defineConfig({
     alias: [
       {
         find: '@tsdraw/react/tsdraw.css',
-        replacement: fileURLToPath(new URL('../../packages/tsdraw-react/src/styles/tsdraw.css', import.meta.url)),
+        replacement: fileURLToPath(new URL('../../packages/tsdraw-react/dist/tsdraw.css', import.meta.url)),
       },
       {
         find: /^@tsdraw\/react$/,
-        replacement: fileURLToPath(new URL('../../packages/tsdraw-react/src/index.ts', import.meta.url)),
+        replacement: fileURLToPath(new URL('../../packages/tsdraw-react/dist/index.js', import.meta.url)),
       },
       {
         find: /^@tsdraw\/core$/,
-        replacement: fileURLToPath(new URL('../../packages/tsdraw-core/src/index.ts', import.meta.url)),
+        replacement: fileURLToPath(new URL('../../packages/tsdraw-core/dist/index.js', import.meta.url)),
       },
     ],
   },

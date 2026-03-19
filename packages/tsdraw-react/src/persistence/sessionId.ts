@@ -9,10 +9,14 @@ function createSessionId(): string {
 export function getOrCreateSessionId(): string {
   if (typeof window === 'undefined') return createSessionId();
 
-  const existing = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
-  if (existing) return existing;
+  try {
+    const existing = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (existing) return existing;
 
-  const newId = createSessionId();
-  window.sessionStorage.setItem(SESSION_STORAGE_KEY, newId);
-  return newId;
+    const newId = createSessionId();
+    window.sessionStorage.setItem(SESSION_STORAGE_KEY, newId);
+    return newId;
+  } catch {
+    return createSessionId();
+  }
 }
