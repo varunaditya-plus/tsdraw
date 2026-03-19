@@ -4,7 +4,7 @@ import type { ColorStyle, DashStyle, DefaultToolId, SizeStyle, ToolDefinition, T
 import { SelectionOverlay } from './SelectionOverlay.js';
 import { StylePanel } from './StylePanel.js';
 import { ToolOverlay } from './ToolOverlay.js';
-import { Toolbar, getDefaultToolbarIcon, type ToolbarItem } from './Toolbar.js';
+import { Toolbar, getDefaultToolbarIcon, type ToolbarPart } from './Toolbar.js';
 import {
   useTsdrawCanvasController,
   type TsdrawCursorContext,
@@ -12,7 +12,7 @@ import {
   type TsdrawToolOverlayState,
 } from '../canvas/useTsdrawCanvasController.js';
 
-const DEFAULT_TOOL_IDS: DefaultToolId[] = ['select', 'pen', 'eraser', 'hand'];
+const DEFAULT_TOOLBAR_PARTS: ToolbarPartItem[][] = [['undo', 'redo'], ['select', 'hand', 'pen', 'eraser']];
 
 const DEFAULT_TOOL_LABELS: Record<DefaultToolId, string> = {
   select: 'Select',
@@ -45,7 +45,8 @@ export interface TsdrawCustomTool {
   showStylePanel?: boolean;
 }
 
-export type TsdrawToolItem = DefaultToolId | TsdrawCustomTool;
+export type TsdrawToolbarBuiltInAction = 'undo' | 'redo';
+export type ToolbarPartItem = ToolId | TsdrawToolbarBuiltInAction;
 
 export interface TsdrawUiPlacement {
   anchor?: UiAnchor;
@@ -57,6 +58,7 @@ export interface TsdrawUiPlacement {
 export interface TsdrawUiOptions {
   toolbar?: {
     placement?: TsdrawUiPlacement;
+    parts?: ToolbarPartItem[][];
   };
   stylePanel?: {
     placement?: TsdrawUiPlacement;
@@ -93,7 +95,7 @@ export interface TsdrawProps {
   style?: CSSProperties;
   theme?: 'light' | 'dark' | 'system';
   persistenceKey?: string;
-  tools?: TsdrawToolItem[];
+  customTools?: TsdrawCustomTool[];
   initialToolId?: ToolId;
   uiOptions?: TsdrawUiOptions;
   onMount?: (api: TsdrawMountApi) => void | (() => void);
@@ -101,12 +103,8 @@ export interface TsdrawProps {
 
 export type TsdrawCanvasProps = TsdrawProps;
 
-function isCustomTool(toolItem: TsdrawToolItem): toolItem is TsdrawCustomTool {
-  return typeof toolItem !== 'string';
-}
-
-function getToolId(toolItem: TsdrawToolItem): ToolId {
-  return typeof toolItem === 'string' ? toolItem : toolItem.id;
+function isToolbarAction(item: ToolbarPartItem): item is TsdrawToolbarBuiltInAction {
+  return item === 'undo' || item === 'redo';
 }
 
 function resolvePlacementStyle(
@@ -152,44 +150,55 @@ export function Tsdraw(props: TsdrawProps) {
     if (typeof window === 'undefined') return 'light';
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
-  const toolItems = props.tools ?? DEFAULT_TOOL_IDS;
-  const customTools = useMemo(
-    () => toolItems.filter(isCustomTool),
-    [toolItems]
-  );
-  const toolDefinitions = useMemo(
-    () => customTools.map((tool) => tool.definition),
+  const customTools = props.customTools ?? [];
+  const toolbarPartIds = props.uiOptions?.toolbar?.parts ?? DEFAULT_TOOLBAR_PARTS;
+  const customToolMap = useMemo(
+    () => new Map(customTools.map((customTool) => [customTool.id, customTool])),
     [customTools]
   );
-  const toolbarItems = useMemo<ToolbarItem[]>(
-    () =>
-      toolItems.map((tool) => {
-        if (typeof tool === 'string') {
-          return {
-            id: tool,
-            label: DEFAULT_TOOL_LABELS[tool],
-            icon: (isActive) => getDefaultToolbarIcon(tool, isActive),
-          };
+  const toolbarToolIds = useMemo(() => {
+    const ids = new Set<ToolId>();
+    for (const toolbarPart of toolbarPartIds) {
+      for (const item of toolbarPart) {
+        if (isToolbarAction(item)) continue;
+        if (item in DEFAULT_TOOL_LABELS || customToolMap.has(item)) {
+          ids.add(item);
         }
-        return {
-          id: tool.id,
-          label: tool.label,
-          icon: (isActive) => (isActive && tool.iconSelected ? tool.iconSelected : tool.icon),
-        };
-      }),
-    [toolItems]
+      }
+    }
+    return ids;
+  }, [customToolMap, toolbarPartIds]);
+  const toolDefinitions = useMemo(
+    () => customTools.filter((customTool) => toolbarToolIds.has(customTool.id)).map((customTool) => customTool.definition),
+    [customTools, toolbarToolIds]
   );
   const stylePanelToolIds = useMemo<ToolId[]>(
-    () =>
-      toolItems
-        .filter((tool) => {
-          if (typeof tool === 'string') return tool === 'pen';
-          return tool.showStylePanel ?? false;
-        })
-        .map(getToolId),
-    [toolItems]
+    () => {
+      const nextToolIds = new Set<ToolId>();
+      if (toolbarToolIds.has('pen')) {
+        nextToolIds.add('pen');
+      }
+      for (const customTool of customTools) {
+        if ((customTool.showStylePanel ?? false) && toolbarToolIds.has(customTool.id)) {
+          nextToolIds.add(customTool.id);
+        }
+      }
+      return [...nextToolIds];
+    },
+    [customTools, toolbarToolIds]
   );
-  const initialTool: ToolId = props.initialToolId ?? toolbarItems[0]?.id ?? 'pen';
+  const firstToolbarTool = useMemo(() => {
+    for (const toolbarPart of toolbarPartIds) {
+      for (const item of toolbarPart) {
+        if (isToolbarAction(item)) continue;
+        if (item in DEFAULT_TOOL_LABELS || customToolMap.has(item)) {
+          return item;
+        }
+      }
+    }
+    return undefined;
+  }, [customToolMap, toolbarPartIds]);
+  const initialTool: ToolId = props.initialToolId ?? firstToolbarTool ?? 'pen';
   const requestedTheme = props.theme ?? 'light';
 
   // Themes and so that system theme works
@@ -221,7 +230,12 @@ export function Tsdraw(props: TsdrawProps) {
     canvasCursor: defaultCanvasCursor,
     cursorContext,
     toolOverlay,
+    isPersistenceReady,
     showStylePanel,
+    canUndo,
+    canRedo,
+    undo,
+    redo,
     setTool,
     applyDrawStyle,
     handleResizePointerDown,
@@ -251,6 +265,59 @@ export function Tsdraw(props: TsdrawProps) {
   );
   const overlayNode = props.uiOptions?.overlays?.renderToolOverlay?.({ defaultOverlay: defaultToolOverlay, overlayState: toolOverlay, currentTool }) ?? defaultToolOverlay;
   const customElements = props.uiOptions?.customElements ?? [];
+  const toolbarParts = useMemo<ToolbarPart[]>(
+    () =>
+      toolbarPartIds
+        .map((toolbarPart, partIndex) => {
+          const items = toolbarPart
+            .map((item) => {
+              if (item === 'undo') {
+                return {
+                  type: 'action' as const,
+                  id: 'undo' as const,
+                  label: 'Undo',
+                  disabled: !canUndo,
+                  onSelect: undo,
+                };
+              }
+
+              if (item === 'redo') {
+                return {
+                  type: 'action' as const,
+                  id: 'redo' as const,
+                  label: 'Redo',
+                  disabled: !canRedo,
+                  onSelect: redo,
+                };
+              }
+
+              if (item in DEFAULT_TOOL_LABELS) {
+                return {
+                  type: 'tool' as const,
+                  id: item,
+                  label: DEFAULT_TOOL_LABELS[item as DefaultToolId],
+                  icon: (isActive: boolean) => getDefaultToolbarIcon(item, isActive),
+                };
+              }
+
+              const customTool = customToolMap.get(item);
+              if (!customTool) return null;
+              return {
+                type: 'tool' as const,
+                id: customTool.id,
+                label: customTool.label,
+                icon: (isActive: boolean) => (isActive && customTool.iconSelected ? customTool.iconSelected : customTool.icon),
+              };
+            })
+            .filter((nextItem): nextItem is NonNullable<typeof nextItem> => nextItem != null);
+          return {
+            id: `toolbar-part-${partIndex.toString(36)}`,
+            items,
+          };
+        })
+        .filter((part) => part.items.length > 0),
+    [canRedo, canUndo, customToolMap, redo, toolbarPartIds, undo]
+  );
 
   return (
     <div
@@ -286,7 +353,7 @@ export function Tsdraw(props: TsdrawProps) {
         onResizePointerDown={handleResizePointerDown}
       />
       <StylePanel
-        visible={showStylePanel}
+        visible={isPersistenceReady && showStylePanel}
         style={stylePanelPlacementStyle}
         theme={resolvedTheme}
         drawColor={drawColor}
@@ -310,10 +377,11 @@ export function Tsdraw(props: TsdrawProps) {
         </div>
       ))}
       <Toolbar
-        items={toolbarItems}
+        parts={toolbarParts}
         style={toolbarPlacementStyle}
-        currentTool={currentTool}
+        currentTool={isPersistenceReady ? currentTool : null}
         onToolChange={setTool}
+        disabled={!isPersistenceReady}
       />
     </div>
   );

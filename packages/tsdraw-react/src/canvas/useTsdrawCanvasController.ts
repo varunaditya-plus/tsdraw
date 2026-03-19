@@ -52,6 +52,10 @@ export interface TsdrawMountApi {
   canvas: HTMLCanvasElement;
   setTool: (tool: ToolId) => void;
   getCurrentTool: () => ToolId;
+  undo: () => boolean;
+  redo: () => boolean;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
   applyDrawStyle: (partial: Partial<{ color: ColorStyle; dash: DashStyle; size: SizeStyle }>) => void;
 }
 
@@ -78,7 +82,12 @@ export interface TsdrawCanvasController {
   canvasCursor: string;
   cursorContext: TsdrawCursorContext;
   toolOverlay: TsdrawToolOverlayState;
+  isPersistenceReady: boolean;
   showStylePanel: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
+  undo: () => boolean;
+  redo: () => boolean;
   setTool: (tool: ToolId) => void;
   applyDrawStyle: (partial: Partial<{ color: ColorStyle; dash: DashStyle; size: SizeStyle }>) => void;
   handleResizePointerDown: (e: ReactPointerEvent<HTMLButtonElement>, handle: ResizeHandle) => void;
@@ -160,6 +169,9 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
   const [isMovingSelection, setIsMovingSelection] = useState(false);
   const [isResizingSelection, setIsResizingSelection] = useState(false);
   const [isRotatingSelection, setIsRotatingSelection] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const [isPersistenceReady, setIsPersistenceReady] = useState(!options.persistenceKey);
   const [pointerScreenPoint, setPointerScreenPoint] = useState({ x: 0, y: 0 });
   const [isPointerInsideCanvas, setIsPointerInsideCanvas] = useState(false);
 
@@ -255,6 +267,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
         startBounds: bounds,
         startShapes: buildTransformSnapshots(editor, selectedShapeIdsRef.current),
       };
+      editor.beginHistoryEntry();
       selectDragRef.current.mode = 'resize';
       const p = getPagePointFromClient(editor, e.clientX, e.clientY);
       editor.input.pointerDown(p.x, p.y, 0.5, false);
@@ -286,6 +299,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
         startSelectionRotationDeg: selectionRotationRef.current,
         startShapes: buildTransformSnapshots(editor, selectedShapeIdsRef.current),
       };
+      editor.beginHistoryEntry();
       selectDragRef.current.mode = 'rotate';
       editor.input.pointerDown(p.x, p.y, 0.5, false);
       selectDragRef.current.startPage = p;
@@ -321,11 +335,16 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     let persistenceActive = false;
     const persistenceKey = options.persistenceKey;
     const sessionId = getOrCreateSessionId();
+    const syncHistoryState = () => {
+      setCanUndo(editor.canUndo());
+      setCanRedo(editor.canRedo());
+    };
 
     const activeTool = editor.getCurrentToolId();
     editorRef.current = editor;
     setCurrentToolState(activeTool);
     currentToolRef.current = activeTool;
+    syncHistoryState();
 
     const initialStyle = editor.getCurrentDrawStyle();
     setDrawColor(initialStyle.color);
@@ -355,6 +374,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
       await persistenceDb.storeSnapshot({
         records: snapshot.document.records,
         state: snapshot.state,
+        history: editor.getHistorySnapshot(),
         sessionId,
       });
       persistenceChannel?.postMessage({
@@ -401,6 +421,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     const applyRemoteDocumentSnapshot = (document: TsdrawDocumentSnapshot) => {
       ignorePersistenceChanges = true;
       editor.loadDocumentSnapshot(document);
+      editor.clearRedoHistory();
       reconcileSelectionAfterDocumentLoad();
       render();
       ignorePersistenceChanges = false;
@@ -437,6 +458,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     const handlePointerDown = (e: PointerEvent) => {
       if (!canvas.contains(e.target as Node)) return;
       isPointerActiveRef.current = true;
+      editor.beginHistoryEntry();
       canvas.setPointerCapture(e.pointerId);
       lastPointerClientRef.current = { x: e.clientX, y: e.clientY };
       updatePointerPreview(e.clientX, e.clientY);
@@ -580,6 +602,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
           };
           render();
           refreshSelectionBounds(editor);
+          editor.endHistoryEntry();
           return;
         }
 
@@ -589,6 +612,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
           resizeRef.current = { handle: null, startBounds: null, startShapes: new Map() };
           render();
           refreshSelectionBounds(editor);
+          editor.endHistoryEntry();
           return;
         }
 
@@ -597,6 +621,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
           selectDragRef.current.mode = 'none';
           render();
           refreshSelectionBounds(editor);
+          editor.endHistoryEntry();
           return;
         }
 
@@ -631,6 +656,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
             pendingRemoteDocumentRef.current = null;
             applyRemoteDocumentSnapshot(pendingRemoteDocument);
           }
+          editor.endHistoryEntry();
           return;
         }
       }
@@ -643,9 +669,29 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
         pendingRemoteDocumentRef.current = null;
         applyRemoteDocumentSnapshot(pendingRemoteDocument);
       }
+      editor.endHistoryEntry();
     };
 
+    // undo/redo keybinds
     const handleKeyDown = (e: KeyboardEvent) => {
+      const isMetaPressed = e.metaKey || e.ctrlKey;
+      const loweredKey = e.key.toLowerCase();
+      const isUndoOrRedoKey = loweredKey === 'z' || loweredKey === 'y';
+
+      if (isMetaPressed && isUndoOrRedoKey) {
+        const shouldRedo = loweredKey === 'y' || (loweredKey === 'z' && e.shiftKey);
+        const changed = shouldRedo ? editor.redo() : editor.undo();
+        if (changed) {
+          e.preventDefault();
+          e.stopPropagation();
+          reconcileSelectionAfterDocumentLoad();
+          setSelectionRotationDeg(0);
+          render();
+          syncHistoryState();
+          return;
+        }
+      }
+
       editor.input.setModifiers(e.shiftKey, e.ctrlKey, e.metaKey);
       editor.tools.keyDown({ key: e.key });
       render();
@@ -658,39 +704,51 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     };
 
     const initializePersistence = async () => {
-      if (!persistenceKey) return;
-      persistenceDb = new TsdrawLocalIndexedDb(persistenceKey);
-      const loaded = await persistenceDb.load(sessionId);
-      const snapshot: Partial<TsdrawEditorSnapshot> = {};
-      if (loaded.records.length > 0) {
-        snapshot.document = { records: loaded.records };
-      }
-      if (loaded.state) {
-        snapshot.state = loaded.state;
-      }
-      if (snapshot.document || snapshot.state) {
-        applyLoadedSnapshot(snapshot);
-      }
+      if (!persistenceKey) { setIsPersistenceReady(true); return; }
 
-      persistenceActive = true;
-      persistenceChannel = new BroadcastChannel(`tsdraw:persistence:${persistenceKey}`);
-      persistenceChannel.onmessage = async (event) => {
-        const data = event.data as { type?: string; senderSessionId?: string };
-        if (data?.type !== 'tsdraw:persisted' || data.senderSessionId === sessionId) return;
-        if (!persistenceDb || disposed) return;
-        const nextLoaded = await persistenceDb.load(sessionId);
-        if (nextLoaded.records.length > 0) {
-          const nextDocument: TsdrawDocumentSnapshot = { records: nextLoaded.records };
-          if (isPointerActiveRef.current) {
-            pendingRemoteDocumentRef.current = nextDocument;
-            return;
-          }
-          applyRemoteDocumentSnapshot(nextDocument);
+      try {
+        persistenceDb = new TsdrawLocalIndexedDb(persistenceKey);
+        const loaded = await persistenceDb.load(sessionId);
+        const snapshot: Partial<TsdrawEditorSnapshot> = {};
+        if (loaded.records.length > 0) {
+          snapshot.document = { records: loaded.records };
         }
-      };
+        if (loaded.state) {
+          snapshot.state = loaded.state;
+        }
+        if (snapshot.document || snapshot.state) {
+          applyLoadedSnapshot(snapshot);
+        }
+        editor.loadHistorySnapshot(loaded.history);
+        syncHistoryState();
+
+        persistenceActive = true;
+        persistenceChannel = new BroadcastChannel(`tsdraw:persistence:${persistenceKey}`);
+        persistenceChannel.onmessage = async (event) => {
+          const data = event.data as { type?: string; senderSessionId?: string };
+          if (data?.type !== 'tsdraw:persisted' || data.senderSessionId === sessionId) return;
+          if (!persistenceDb || disposed) return;
+          const nextLoaded = await persistenceDb.load(sessionId);
+          if (nextLoaded.records.length > 0) {
+            const nextDocument: TsdrawDocumentSnapshot = { records: nextLoaded.records };
+            if (isPointerActiveRef.current) {
+              pendingRemoteDocumentRef.current = nextDocument;
+              return;
+            }
+            applyRemoteDocumentSnapshot(nextDocument);
+          }
+        };
+      } finally {
+        if (!disposed) { setIsPersistenceReady(true); }
+      }
     };
 
     const cleanupEditorListener = editor.listen(() => {
+      if (ignorePersistenceChanges) return;
+      schedulePersist();
+    });
+    const cleanupHistoryListener = editor.listenHistory(() => {
+      syncHistoryState();
       if (ignorePersistenceChanges) return;
       schedulePersist();
     });
@@ -719,6 +777,26 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
         currentToolRef.current = tool;
       },
       getCurrentTool: () => editor.getCurrentToolId(),
+      undo: () => {
+        const changed = editor.undo();
+        if (!changed) return false;
+        reconcileSelectionAfterDocumentLoad();
+        setSelectionRotationDeg(0);
+        render();
+        syncHistoryState();
+        return true;
+      },
+      redo: () => {
+        const changed = editor.redo();
+        if (!changed) return false;
+        reconcileSelectionAfterDocumentLoad();
+        setSelectionRotationDeg(0);
+        render();
+        syncHistoryState();
+        return true;
+      },
+      canUndo: () => editor.canUndo(),
+      canRedo: () => editor.canRedo(),
       applyDrawStyle: (partial) => {
         editor.setCurrentDrawStyle(partial);
         if (partial.color) setDrawColor(partial.color);
@@ -732,6 +810,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
       disposed = true;
       schedulePersistRef.current = null;
       cleanupEditorListener();
+      cleanupHistoryListener();
       disposeMount?.();
       ro.disconnect();
       canvas.removeEventListener('pointerdown', handlePointerDown);
@@ -789,6 +868,40 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     [render]
   );
 
+  const undo = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) return false;
+    const changed = editor.undo();
+    if (!changed) return false;
+    const nextSelectedShapeIds = selectedShapeIdsRef.current.filter((shapeId) => editor.getShape(shapeId) != null);
+    if (nextSelectedShapeIds.length !== selectedShapeIdsRef.current.length) {
+      selectedShapeIdsRef.current = nextSelectedShapeIds;
+      setSelectedShapeIds(nextSelectedShapeIds);
+    }
+    setSelectionRotationDeg(0);
+    render();
+    setCanUndo(editor.canUndo());
+    setCanRedo(editor.canRedo());
+    return true;
+  }, [render]);
+
+  const redo = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) return false;
+    const changed = editor.redo();
+    if (!changed) return false;
+    const nextSelectedShapeIds = selectedShapeIdsRef.current.filter((shapeId) => editor.getShape(shapeId) != null);
+    if (nextSelectedShapeIds.length !== selectedShapeIdsRef.current.length) {
+      selectedShapeIdsRef.current = nextSelectedShapeIds;
+      setSelectedShapeIds(nextSelectedShapeIds);
+    }
+    setSelectionRotationDeg(0);
+    render();
+    setCanUndo(editor.canUndo());
+    setCanRedo(editor.canRedo());
+    return true;
+  }, [render]);
+
   const showToolOverlay = isPointerInsideCanvas && (currentTool === 'pen' || currentTool === 'eraser');
   const canvasCursor = getCanvasCursor(currentTool, {
     isMovingSelection,
@@ -828,7 +941,12 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     canvasCursor,
     cursorContext,
     toolOverlay,
+    isPersistenceReady,
     showStylePanel: stylePanelToolIdsRef.current.includes(currentTool),
+    canUndo,
+    canRedo,
+    undo,
+    redo,
     setTool,
     applyDrawStyle,
     handleResizePointerDown,

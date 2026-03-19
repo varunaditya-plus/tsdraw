@@ -41,6 +41,12 @@ export interface TsdrawEditorSnapshot {
   state: TsdrawSessionStateSnapshot;
 }
 
+export interface TsdrawHistorySnapshot {
+  version: 1;
+  undoStack: TsdrawDocumentSnapshot[];
+  redoStack: TsdrawDocumentSnapshot[];
+}
+
 export interface DocumentStoreSnapshot {
   page: PageState;
   order: ShapeId[];

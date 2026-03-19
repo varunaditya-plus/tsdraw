@@ -1,17 +1,34 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { ToolId } from '@tsdraw/core';
-import { IconEraser, IconHandStop, IconPencil, IconPointer } from '@tabler/icons-react';
+import { IconArrowBackUp, IconArrowForwardUp, IconEraser, IconHandStop, IconPencil, IconPointer } from '@tabler/icons-react';
 
-export interface ToolbarItem {
+export interface ToolbarToolItem {
+  type: 'tool';
   id: ToolId;
   label: string;
   icon: ReactNode | ((isActive: boolean) => ReactNode);
 }
 
+export interface ToolbarActionItem {
+  type: 'action';
+  id: 'undo' | 'redo';
+  label: string;
+  disabled: boolean;
+  onSelect: () => void;
+}
+
+export type ToolbarRenderItem = ToolbarToolItem | ToolbarActionItem;
+
+export interface ToolbarPart {
+  id: string;
+  items: ToolbarRenderItem[];
+}
+
 interface ToolbarProps {
-  items: ToolbarItem[];
-  currentTool: ToolId;
+  parts: ToolbarPart[];
+  currentTool: ToolId | null;
   onToolChange: (tool: ToolId) => void;
+  disabled?: boolean;
   style?: CSSProperties;
 }
 
@@ -23,25 +40,52 @@ export function getDefaultToolbarIcon(toolId: ToolId, isActive: boolean): ReactN
   return null;
 }
 
-export function Toolbar({ items, currentTool, onToolChange, style }: ToolbarProps) {
+function getActionIcon(actionId: 'undo' | 'redo'): ReactNode {
+  if (actionId === 'undo') return <IconArrowBackUp size={16} stroke={1.8} />;
+  return <IconArrowForwardUp size={16} stroke={1.8} />;
+}
+
+export function Toolbar({ parts, currentTool, onToolChange, disabled, style }: ToolbarProps) {
   return (
     <div className="tsdraw-toolbar" style={style}>
-      {items.map((item) => {
-        const isActive = currentTool === item.id;
-        return (
-          <button
-            key={item.id}
-            type="button"
-            className="tsdraw-toolbar-btn"
-            data-active={isActive ? 'true' : undefined}
-            onClick={() => onToolChange(item.id)}
-            title={item.label}
-            aria-label={item.label}
-          >
-            {typeof item.icon === 'function' ? item.icon(isActive) : item.icon}
-          </button>
-        );
-      })}
+      {parts.map((part, partIndex) => (
+        <div key={part.id} className="tsdraw-toolbar-part">
+          {part.items.map((item) => {
+            if (item.type === 'action') {
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="tsdraw-toolbar-btn"
+                  onClick={item.onSelect}
+                  title={item.label}
+                  aria-label={item.label}
+                  disabled={disabled || item.disabled}
+                >
+                  {getActionIcon(item.id)}
+                </button>
+              );
+            }
+
+            const isActive = currentTool === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className="tsdraw-toolbar-btn"
+                data-active={isActive ? 'true' : undefined}
+                onClick={() => onToolChange(item.id)}
+                title={item.label}
+                aria-label={item.label}
+                disabled={disabled}
+              >
+                {typeof item.icon === 'function' ? item.icon(isActive) : item.icon}
+              </button>
+            );
+          })}
+          {partIndex < parts.length - 1 ? <div className="tsdraw-toolbar-separator" /> : null}
+        </div>
+      ))}
     </div>
   );
 }

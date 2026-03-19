@@ -8,8 +8,8 @@ import { wavyToolDefinition } from './wavyTool.js';
 import { emojiToolDefinition } from './emojiTool.js';
 import './App.css';
 
-// This is a custom tool which we can easily add to the toolbar using the 'tools' prop
-// Go to wavyTool.ts to see how its built using custom logic
+// These are custom tools which we can easily add to the toolbar using the customTools prop. After, position them in the toolbar using uiOptions.toolbar.parts
+// Go to wavyTool.ts or emojiTool.ts to see how they're built using custom logic
 const wavyTool: TsdrawCustomTool = {
   id: 'wavy',
   label: 'Wavy',
@@ -161,11 +161,12 @@ export function App() {
         height="100%"
         theme="light"
         persistenceKey="ts-demo"
-        tools={['select', 'hand', 'pen', 'eraser', wavyTool, emojiTool]}
+        customTools={[wavyTool, emojiTool]}
         initialToolId="pen"
         uiOptions={{
           toolbar: { // top-left, bottom-center, center-right, left-center, ... (it can be any valid anchor)
             placement: { anchor: 'top-center', offsetX: 0, offsetY: 18 },
+            parts: [['undo', 'redo'], ['select', 'hand', 'pen', 'eraser', 'wavy', 'emoji']],
           },
           stylePanel: {
             placement: { anchor: 'top-right', offsetX: 18, offsetY: 18 },

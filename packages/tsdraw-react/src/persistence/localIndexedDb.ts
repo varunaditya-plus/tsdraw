@@ -1,11 +1,12 @@
-import type { TsdrawPersistedRecord, TsdrawSessionStateSnapshot } from '@tsdraw/core';
+import type { TsdrawHistorySnapshot, TsdrawPersistedRecord, TsdrawSessionStateSnapshot } from '@tsdraw/core';
 
 const DATABASE_PREFIX = 'tsdraw_v1_';
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 
 const STORE = {
   records: 'records',
   state: 'state',
+  history: 'history',
 } as const;
 
 interface StateRow {
@@ -14,9 +15,16 @@ interface StateRow {
   updatedAt: number;
 }
 
+interface HistoryRow {
+  id: string;
+  snapshot: TsdrawHistorySnapshot;
+  updatedAt: number;
+}
+
 export interface LocalLoadResult {
   records: TsdrawPersistedRecord[];
   state: TsdrawSessionStateSnapshot | null;
+  history: TsdrawHistorySnapshot | null;
 }
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
@@ -42,6 +50,7 @@ function openLocalDatabase(persistenceKey: string): Promise<IDBDatabase> {
       const database = request.result;
       if (!database.objectStoreNames.contains(STORE.records)) { database.createObjectStore(STORE.records); }
       if (!database.objectStoreNames.contains(STORE.state)) { database.createObjectStore(STORE.state); }
+      if (!database.objectStoreNames.contains(STORE.history)) { database.createObjectStore(STORE.history); }
     };
 
     request.onsuccess = () => resolve(request.result);
@@ -63,12 +72,14 @@ export class TsdrawLocalIndexedDb {
 
   async load(sessionId: string): Promise<LocalLoadResult> {
     const database = await this.databasePromise;
-    const transaction = database.transaction([STORE.records, STORE.state], 'readonly');
+    const transaction = database.transaction([STORE.records, STORE.state, STORE.history], 'readonly');
     const recordStore = transaction.objectStore(STORE.records);
     const stateStore = transaction.objectStore(STORE.state);
+    const historyStore = transaction.objectStore(STORE.history);
 
     const records = (await requestToPromise(recordStore.getAll())) as TsdrawPersistedRecord[];
     let state = (await requestToPromise(stateStore.get(sessionId)) as StateRow | undefined)?.snapshot ?? null;
+    let history = (await requestToPromise(historyStore.get(sessionId)) as HistoryRow | undefined)?.snapshot ?? null;
 
     if (!state) {
       const allStates = (await requestToPromise(stateStore.getAll())) as StateRow[];
@@ -78,19 +89,29 @@ export class TsdrawLocalIndexedDb {
       }
     }
 
+    if (!history) {
+      const allHistoryRows = (await requestToPromise(historyStore.getAll())) as HistoryRow[];
+      if (allHistoryRows.length > 0) {
+        allHistoryRows.sort((left, right) => left.updatedAt - right.updatedAt);
+        history = allHistoryRows[allHistoryRows.length - 1]?.snapshot ?? null;
+      }
+    }
+
     await transactionDone(transaction);
-    return { records, state };
+    return { records, state, history };
   }
 
   async storeSnapshot(args: {
     records: TsdrawPersistedRecord[];
     sessionId: string;
     state: TsdrawSessionStateSnapshot;
+    history: TsdrawHistorySnapshot;
   }): Promise<void> {
     const database = await this.databasePromise;
-    const transaction = database.transaction([STORE.records, STORE.state], 'readwrite');
+    const transaction = database.transaction([STORE.records, STORE.state, STORE.history], 'readwrite');
     const recordStore = transaction.objectStore(STORE.records);
     const stateStore = transaction.objectStore(STORE.state);
+    const historyStore = transaction.objectStore(STORE.history);
 
     recordStore.clear();
     for (const record of args.records) {
@@ -103,6 +124,13 @@ export class TsdrawLocalIndexedDb {
       updatedAt: Date.now(),
     };
     stateStore.put(stateRow, args.sessionId);
+
+    const historyRow: HistoryRow = {
+      id: args.sessionId,
+      snapshot: args.history,
+      updatedAt: Date.now(),
+    };
+    historyStore.put(historyRow, args.sessionId);
 
     await transactionDone(transaction);
   }

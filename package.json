@@ -1,6 +1,6 @@
 {
   "name": "tsdraw",
-  "version": "0.4.0",
+  "version": "0.6.0",
   "private": true,
   "description": "tsdraw - a tremendously small drawing library",
   "repository": {

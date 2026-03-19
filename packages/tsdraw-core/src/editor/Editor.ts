@@ -21,6 +21,7 @@ import {
   recordsToDocumentSnapshot,
   type TsdrawDocumentSnapshot,
   type TsdrawEditorSnapshot,
+  type TsdrawHistorySnapshot,
   type TsdrawSessionStateSnapshot,
 } from '../persistence/snapshots.js';
 
@@ -34,9 +35,28 @@ type EditorListener = () => void;
 
 let shapeIdCounter = 0;
 const shapeIdRuntimeSeed = Math.random().toString(36).slice(2, 8);
+const MAX_HISTORY_ENTRIES = 100;
+
 function createShapeId(): ShapeId {
   shapeIdCounter += 1;
   return `shape:${Date.now().toString(36)}-${shapeIdRuntimeSeed}-${shapeIdCounter.toString(36)}`;
+}
+
+function cloneDocumentSnapshot(snapshot: TsdrawDocumentSnapshot): TsdrawDocumentSnapshot {
+  if (typeof structuredClone === 'function') {
+    return structuredClone(snapshot);
+  }
+  return JSON.parse(JSON.stringify(snapshot)) as TsdrawDocumentSnapshot;
+}
+
+function areDocumentSnapshotsEqual(left: TsdrawDocumentSnapshot, right: TsdrawDocumentSnapshot): boolean {
+  if (left.records.length !== right.records.length) return false;
+  for (let i = 0; i < left.records.length; i += 1) {
+    if (JSON.stringify(left.records[i]) !== JSON.stringify(right.records[i])) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // Main editor: document store, viewport, input, tools, renderer
@@ -55,11 +75,23 @@ export class Editor {
   };
   private readonly toolStateContext: ToolStateContext;
   private readonly listeners = new Set<EditorListener>();
+  private readonly historyListeners = new Set<EditorListener>();
+  private undoStack: TsdrawDocumentSnapshot[] = [];
+  private redoStack: TsdrawDocumentSnapshot[] = [];
+  private lastDocumentSnapshot: TsdrawDocumentSnapshot;
+  private suppressHistoryCapture = false;
+  private historyBatchDepth = 0;
+  private historyBatchStartSnapshot: TsdrawDocumentSnapshot | null = null;
+  private historyBatchChanged = false;
 
   // Creates a new editor instance with the given options (with defaults if not provided)
   constructor(opts: EditorOptions = {}) {
     this.options = { dragDistanceSquared: opts.dragDistanceSquared ?? DRAG_DISTANCE_SQUARED };
-    this.store.listen(() => this.emitChange());
+    this.lastDocumentSnapshot = this.getDocumentSnapshot();
+    this.store.listen(() => {
+      this.captureDocumentHistory();
+      this.emitChange();
+    });
     this.toolStateContext = {
       transition: (id, info) => this.tools.transition(id, info),
     };
@@ -70,6 +102,29 @@ export class Editor {
       this.registerToolDefinition(customTool);
     }
     this.setCurrentTool(opts.initialToolId ?? 'pen');
+    this.lastDocumentSnapshot = this.getDocumentSnapshot();
+  }
+
+  private captureDocumentHistory(): void {
+    const nextSnapshot = this.getDocumentSnapshot();
+    const previousSnapshot = this.lastDocumentSnapshot;
+    this.lastDocumentSnapshot = nextSnapshot;
+
+    if (this.suppressHistoryCapture || areDocumentSnapshotsEqual(previousSnapshot, nextSnapshot)) {
+      return;
+    }
+
+    if (this.historyBatchDepth > 0) {
+      this.historyBatchChanged = true;
+      return;
+    }
+
+    this.undoStack.push(cloneDocumentSnapshot(previousSnapshot));
+    if (this.undoStack.length > MAX_HISTORY_ENTRIES) {
+      this.undoStack.splice(0, this.undoStack.length - MAX_HISTORY_ENTRIES);
+    }
+    this.redoStack = [];
+    this.emitHistoryChange();
   }
 
   registerToolDefinition(toolDefinition: ToolDefinition): void {
@@ -154,7 +209,7 @@ export class Editor {
   loadDocumentSnapshot(snapshot: TsdrawDocumentSnapshot): void {
     const documentSnapshot = recordsToDocumentSnapshot(snapshot.records);
     if (!documentSnapshot) return;
-    this.store.loadSnapshot(documentSnapshot);
+    this.runWithoutHistoryCapture(() => { this.store.loadSnapshot(documentSnapshot) });
   }
 
   getSessionStateSnapshot(args?: { selectedShapeIds?: ShapeId[] }): TsdrawSessionStateSnapshot {
@@ -197,10 +252,107 @@ export class Editor {
     return [];
   }
 
+  getHistorySnapshot(): TsdrawHistorySnapshot {
+    return {
+      version: 1,
+      undoStack: this.undoStack.map(cloneDocumentSnapshot),
+      redoStack: this.redoStack.map(cloneDocumentSnapshot),
+    };
+  }
+
+  loadHistorySnapshot(snapshot: TsdrawHistorySnapshot | null | undefined): void {
+    if (!snapshot || snapshot.version !== 1) return;
+    this.undoStack = snapshot.undoStack.map(cloneDocumentSnapshot).slice(-MAX_HISTORY_ENTRIES);
+    this.redoStack = snapshot.redoStack.map(cloneDocumentSnapshot).slice(-MAX_HISTORY_ENTRIES);
+    this.emitHistoryChange();
+  }
+
+  clearRedoHistory(): void {
+    if (this.redoStack.length === 0) return;
+    this.redoStack = [];
+    this.emitHistoryChange();
+  }
+
+  beginHistoryEntry(): void {
+    if (this.historyBatchDepth === 0) {
+      this.historyBatchStartSnapshot = cloneDocumentSnapshot(this.lastDocumentSnapshot);
+      this.historyBatchChanged = false;
+    }
+    this.historyBatchDepth += 1;
+  }
+
+  endHistoryEntry(): void {
+    if (this.historyBatchDepth === 0) return;
+    this.historyBatchDepth -= 1;
+    if (this.historyBatchDepth > 0) return;
+
+    const startSnapshot = this.historyBatchStartSnapshot;
+    this.historyBatchStartSnapshot = null;
+    if (!startSnapshot) return;
+
+    const endSnapshot = this.getDocumentSnapshot();
+    this.lastDocumentSnapshot = endSnapshot;
+    const didDocumentChange = this.historyBatchChanged || !areDocumentSnapshotsEqual(startSnapshot, endSnapshot);
+    this.historyBatchChanged = false;
+    if (!didDocumentChange) return;
+
+    this.undoStack.push(cloneDocumentSnapshot(startSnapshot));
+    if (this.undoStack.length > MAX_HISTORY_ENTRIES) {
+      this.undoStack.splice(0, this.undoStack.length - MAX_HISTORY_ENTRIES);
+    }
+    this.redoStack = [];
+    this.emitHistoryChange();
+  }
+
+  canUndo(): boolean {
+    return this.undoStack.length > 0;
+  }
+
+  canRedo(): boolean {
+    return this.redoStack.length > 0;
+  }
+
+  undo(): boolean {
+    const previousSnapshot = this.undoStack.pop();
+    if (!previousSnapshot) return false;
+
+    const currentSnapshot = this.getDocumentSnapshot();
+    this.redoStack.push(cloneDocumentSnapshot(currentSnapshot));
+    if (this.redoStack.length > MAX_HISTORY_ENTRIES) {
+      this.redoStack.splice(0, this.redoStack.length - MAX_HISTORY_ENTRIES);
+    }
+
+    this.loadDocumentSnapshot(previousSnapshot);
+    this.emitHistoryChange();
+    return true;
+  }
+
+  redo(): boolean {
+    const nextSnapshot = this.redoStack.pop();
+    if (!nextSnapshot) return false;
+
+    const currentSnapshot = this.getDocumentSnapshot();
+    this.undoStack.push(cloneDocumentSnapshot(currentSnapshot));
+    if (this.undoStack.length > MAX_HISTORY_ENTRIES) {
+      this.undoStack.splice(0, this.undoStack.length - MAX_HISTORY_ENTRIES);
+    }
+
+    this.loadDocumentSnapshot(nextSnapshot);
+    this.emitHistoryChange();
+    return true;
+  }
+
   listen(listener: EditorListener): () => void {
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
+    };
+  }
+
+  listenHistory(listener: EditorListener): () => void {
+    this.historyListeners.add(listener);
+    return () => {
+      this.historyListeners.delete(listener);
     };
   }
 
@@ -220,6 +372,23 @@ export class Editor {
   private emitChange() {
     for (const listener of this.listeners) {
       listener();
+    }
+  }
+
+  private emitHistoryChange() {
+    for (const listener of this.historyListeners) {
+      listener();
+    }
+  }
+
+  private runWithoutHistoryCapture(fn: () => void): void {
+    const previousValue = this.suppressHistoryCapture;
+    this.suppressHistoryCapture = true;
+    try {
+      fn();
+    } finally {
+      this.suppressHistoryCapture = previousValue;
+      this.lastDocumentSnapshot = this.getDocumentSnapshot();
     }
   }
 }

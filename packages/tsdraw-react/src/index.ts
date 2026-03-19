@@ -5,7 +5,8 @@ export type {
   TsdrawCustomElementRenderArgs,
   TsdrawCustomTool,
   TsdrawProps,
-  TsdrawToolItem,
+  ToolbarPartItem,
+  TsdrawToolbarBuiltInAction,
   TsdrawUiOptions,
   TsdrawUiPlacement,
   UiAnchor,
@@ -16,6 +17,6 @@ export type {
   TsdrawToolOverlayState,
 } from './canvas/useTsdrawCanvasController.js';
 export { getDefaultToolbarIcon } from './components/Toolbar.js';
-export type { ToolbarItem } from './components/Toolbar.js';
+export type { ToolbarActionItem, ToolbarPart, ToolbarRenderItem, ToolbarToolItem } from './components/Toolbar.js';
 export { TsdrawCanvas } from './components/TsdrawCanvas.js';
 export type { TsdrawCanvasProps } from './components/TsdrawCanvas.js';

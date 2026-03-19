@@ -47,14 +47,29 @@
 .tsdraw-toolbar {
   position: absolute;
   display: flex;
-  gap: 2px;
-  padding: 3.5px;
+  align-items: center;
+  gap: 0;
+  padding: 4.5px;
   background: var(--tsdraw-color-panel);
   border-radius: var(--tsdraw-radius);
   border: 1px solid var(--tsdraw-color-border);
   box-shadow: 0 1px 0 var(--tsdraw-color-panel-highlight) inset, 0 6px 18px var(--tsdraw-color-panel-shadow);
   z-index: 100;
   pointer-events: all;
+}
+
+.tsdraw-toolbar-part {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.tsdraw-toolbar-separator {
+  width: 1px;
+  height: 24px;
+  margin: 0 5px;
+  background: var(--tsdraw-color-border);
+  opacity: 0.9;
 }
 
 .tsdraw-toolbar button {
@@ -69,6 +84,13 @@
 }
 .tsdraw-toolbar button:hover {
   background: var(--tsdraw-color-muted);
+}
+.tsdraw-toolbar button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+.tsdraw-toolbar button:disabled:hover {
+  background: transparent;
 }
 .tsdraw-toolbar button[data-active="true"],
 .tsdraw-toolbar .tsdraw-toolbar-btn[data-active="true"] {
