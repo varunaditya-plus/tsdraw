@@ -185,10 +185,11 @@ export class Editor {
   }
 
   setViewport(partial: Partial<Viewport>) {
+    const rawZoom = partial.zoom ?? this.viewport.zoom;
     this.viewport = {
       x: partial.x ?? this.viewport.x,
       y: partial.y ?? this.viewport.y,
-      zoom: partial.zoom ?? this.viewport.zoom,
+      zoom: Math.max(0.1, Math.min(4, rawZoom)),
     };
     this.emitChange();
   }

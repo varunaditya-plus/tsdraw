@@ -106,6 +106,12 @@ export class DocumentStore {
   loadSnapshot(snapshot: DocumentStoreSnapshot): void {
     const pageState = cloneValue(snapshot.page);
     const normalizedOrder = [...snapshot.order].filter((shapeId) => pageState.shapes[shapeId] != null);
+    const orderedSet = new Set(normalizedOrder);
+    for (const shapeId of Object.keys(pageState.shapes)) {
+      if (!orderedSet.has(shapeId)) {
+        normalizedOrder.push(shapeId);
+      }
+    }
     this.state = {
       id: pageState.id,
       shapes: pageState.shapes,

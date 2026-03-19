@@ -45,7 +45,7 @@
   },
   "dependencies": {
     "@tabler/icons-react": "^3.40.0",
-    "@tsdraw/core": "0.6.0"
+    "@tsdraw/core": "latest"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",

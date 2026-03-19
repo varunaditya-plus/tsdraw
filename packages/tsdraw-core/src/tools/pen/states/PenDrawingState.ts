@@ -265,13 +265,14 @@ export class PenDrawingState extends StateNode {
           type: 'straight',
           path: encodePoints([prevEnd, { ...anchorPt, z: pressure }]),
         };
+        const withStraightSeg = [...segments, seg];
         this.editor.updateShapes([
           {
             id,
             type: 'draw',
             props: {
-              segments: [...segments, seg],
-              isClosed: this.detectClosure(segments, size, scale),
+              segments: withStraightSeg,
+              isClosed: this.detectClosure(withStraightSeg, size, scale),
             },
           },
         ]);
@@ -347,7 +348,7 @@ export class PenDrawingState extends StateNode {
             type: 'draw',
             props: {
               segments: updated,
-              isClosed: this.detectClosure(segments, size, scale),
+              isClosed: this.detectClosure(updated, size, scale),
             },
           },
         ]);
