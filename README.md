@@ -5,9 +5,9 @@
 	</picture>
 </div>
 
-<p align="center">
+<!-- <p align="center">
   <img alt="tsdraw demo" src="https://github.com/tsdraw/tsdraw/raw/main/assets/demo.png" />
-</p>
+</p> -->
 
 <h3 align="center">
   Easily create infinite canvas apps in React with tsdraw<br>

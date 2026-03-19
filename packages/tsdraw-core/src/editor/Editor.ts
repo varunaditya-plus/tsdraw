@@ -7,13 +7,17 @@ import type { ToolStateContext } from '../store/stateNode.js';
 import { ToolManager, type ToolDefinition, type ToolId } from '../tools/toolManager.js';
 import { PenIdleState } from '../tools/pen/states/PenIdleState.js';
 import { PenDrawingState } from '../tools/pen/states/PenDrawingState.js';
+import { SquareIdleState } from '../tools/square/states/SquareIdleState.js';
+import { SquareDrawingState } from '../tools/square/states/SquareDrawingState.js';
+import { CircleIdleState } from '../tools/circle/states/CircleIdleState.js';
+import { CircleDrawingState } from '../tools/circle/states/CircleDrawingState.js';
 import { EraserIdleState } from '../tools/eraser/states/EraserIdleState.js';
 import { EraserPointingState } from '../tools/eraser/states/EraserPointingState.js';
 import { EraserErasingState } from '../tools/eraser/states/EraserErasingState.js';
 import { SelectIdleState } from '../tools/select/states/SelectIdleState.js';
 import { HandIdleState } from '../tools/hand/states/HandIdleState.js';
 import { HandDraggingState } from '../tools/hand/states/HandDraggingState.js';
-import type { ShapeId, Shape, DrawShape, ColorStyle, DashStyle, SizeStyle } from '../types.js';
+import type { ShapeId, Shape, DrawShape, ColorStyle, DashStyle, SizeStyle, FillStyle } from '../types.js';
 import type { Vec3 } from '../types.js';
 import { DRAG_DISTANCE_SQUARED } from '../types.js';
 import {
@@ -68,9 +72,10 @@ export class Editor {
   viewport: Viewport = createViewport();
   readonly options: { dragDistanceSquared: number };
   // Default draw style
-  private drawStyle: { color: ColorStyle; dash: DashStyle; size: SizeStyle } = {
+  private drawStyle: { color: ColorStyle; dash: DashStyle; fill: FillStyle; size: SizeStyle } = {
     color: 'black',
     dash: 'draw',
+    fill: 'none',
     size: 'm',
   };
   private readonly toolStateContext: ToolStateContext;
@@ -137,6 +142,8 @@ export class Editor {
   private getDefaultToolDefinitions(): ToolDefinition[] {
     return [
       { id: 'pen', initialStateId: PenIdleState.id, stateConstructors: [PenIdleState, PenDrawingState] },
+      { id: 'square', initialStateId: SquareIdleState.id, stateConstructors: [SquareIdleState, SquareDrawingState] },
+      { id: 'circle', initialStateId: CircleIdleState.id, stateConstructors: [CircleIdleState, CircleDrawingState] },
       { id: 'eraser', initialStateId: EraserIdleState.id, stateConstructors: [EraserIdleState, EraserPointingState, EraserErasingState] },
       { id: 'select', initialStateId: SelectIdleState.id, stateConstructors: [SelectIdleState] },
       { id: 'hand', initialStateId: HandIdleState.id, stateConstructors: [HandIdleState, HandDraggingState] },
@@ -179,7 +186,7 @@ export class Editor {
   getCurrentToolId(): ToolId { return this.tools.getCurrentToolId(); }
 
   getCurrentDrawStyle() { return { ...this.drawStyle }; }
-  setCurrentDrawStyle(partial: Partial<{ color: ColorStyle; dash: DashStyle; size: SizeStyle }>) {
+  setCurrentDrawStyle(partial: Partial<{ color: ColorStyle; dash: DashStyle; fill: FillStyle; size: SizeStyle }>) {
     this.drawStyle = { ...this.drawStyle, ...partial };
     this.emitChange();
   }
@@ -229,7 +236,12 @@ export class Editor {
 
   loadSessionStateSnapshot(snapshot: TsdrawSessionStateSnapshot): ShapeId[] {
     this.setViewport(snapshot.viewport);
-    this.setCurrentDrawStyle(snapshot.drawStyle);
+    this.setCurrentDrawStyle({
+      color: snapshot.drawStyle.color,
+      dash: snapshot.drawStyle.dash,
+      fill: snapshot.drawStyle.fill ?? 'none',
+      size: snapshot.drawStyle.size,
+    });
     if (this.tools.hasTool(snapshot.currentToolId)) {
       this.setCurrentTool(snapshot.currentToolId);
     }

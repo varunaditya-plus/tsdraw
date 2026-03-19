@@ -1,0 +1,146 @@
+import type { DrawSegment, Vec3 } from '../../types.js';
+import { encodePoints } from '../../utils/pathCodec.js';
+
+export interface ShapeBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+const MIN_SIDE_LENGTH = 1;
+const DEFAULT_RECTANGLE_WIDTH = 180;
+const DEFAULT_RECTANGLE_HEIGHT = 120;
+const DEFAULT_ELLIPSE_WIDTH = 180;
+const DEFAULT_ELLIPSE_HEIGHT = 120;
+
+function toSizedBounds(
+  anchorX: number,
+  anchorY: number,
+  cursorX: number,
+  cursorY: number,
+  forceEqualSides: boolean
+): ShapeBounds {
+  const rawDeltaX = cursorX - anchorX;
+  const rawDeltaY = cursorY - anchorY;
+  const sideLength = Math.max(Math.abs(rawDeltaX), Math.abs(rawDeltaY), MIN_SIDE_LENGTH);
+
+  if (forceEqualSides) {
+    const nextDeltaX = rawDeltaX < 0 ? -sideLength : sideLength;
+    const nextDeltaY = rawDeltaY < 0 ? -sideLength : sideLength;
+    return normalizeBounds(anchorX, anchorY, anchorX + nextDeltaX, anchorY + nextDeltaY);
+  }
+
+  return normalizeBounds(anchorX, anchorY, cursorX, cursorY);
+}
+
+function normalizeBounds(
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number
+): ShapeBounds {
+  const x = Math.min(startX, endX);
+  const y = Math.min(startY, endY);
+  const width = Math.max(Math.abs(endX - startX), MIN_SIDE_LENGTH);
+  const height = Math.max(Math.abs(endY - startY), MIN_SIDE_LENGTH);
+  return { x, y, width, height };
+}
+
+export function buildSquareBounds(
+  anchorX: number,
+  anchorY: number,
+  cursorX: number,
+  cursorY: number
+): ShapeBounds {
+  return toSizedBounds(anchorX, anchorY, cursorX, cursorY, true);
+}
+
+export function buildRectangleBounds(
+  anchorX: number,
+  anchorY: number,
+  cursorX: number,
+  cursorY: number
+): ShapeBounds {
+  return toSizedBounds(anchorX, anchorY, cursorX, cursorY, false);
+}
+
+export function buildDefaultCenteredRectangleBounds(
+  centerX: number,
+  centerY: number
+): ShapeBounds {
+  const halfWidth = DEFAULT_RECTANGLE_WIDTH / 2;
+  const halfHeight = DEFAULT_RECTANGLE_HEIGHT / 2;
+  return {
+    x: centerX - halfWidth,
+    y: centerY - halfHeight,
+    width: DEFAULT_RECTANGLE_WIDTH,
+    height: DEFAULT_RECTANGLE_HEIGHT,
+  };
+}
+
+export function buildRectangleSegments(width: number, height: number): DrawSegment[] {
+  const topLeft: Vec3 = { x: 0, y: 0, z: 0.5 };
+  const topRight: Vec3 = { x: width, y: 0, z: 0.5 };
+  const bottomRight: Vec3 = { x: width, y: height, z: 0.5 };
+  const bottomLeft: Vec3 = { x: 0, y: height, z: 0.5 };
+  return [
+    { type: 'straight', path: encodePoints([topLeft, topRight]) },
+    { type: 'straight', path: encodePoints([topRight, bottomRight]) },
+    { type: 'straight', path: encodePoints([bottomRight, bottomLeft]) },
+    { type: 'straight', path: encodePoints([bottomLeft, topLeft]) },
+  ];
+}
+
+export function buildCircleBounds(
+  anchorX: number,
+  anchorY: number,
+  cursorX: number,
+  cursorY: number
+): ShapeBounds {
+  return toSizedBounds(anchorX, anchorY, cursorX, cursorY, true);
+}
+
+export function buildEllipseBounds(
+  anchorX: number,
+  anchorY: number,
+  cursorX: number,
+  cursorY: number
+): ShapeBounds {
+  return toSizedBounds(anchorX, anchorY, cursorX, cursorY, false);
+}
+
+export function buildDefaultCenteredEllipseBounds(
+  centerX: number,
+  centerY: number
+): ShapeBounds {
+  const halfWidth = DEFAULT_ELLIPSE_WIDTH / 2;
+  const halfHeight = DEFAULT_ELLIPSE_HEIGHT / 2;
+  return {
+    x: centerX - halfWidth,
+    y: centerY - halfHeight,
+    width: DEFAULT_ELLIPSE_WIDTH,
+    height: DEFAULT_ELLIPSE_HEIGHT,
+  };
+}
+
+export function buildEllipseSegments(width: number, height: number): DrawSegment[] {
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const radiusX = width / 2;
+  const radiusY = height / 2;
+  const sampleCount = 64;
+  const sampledPoints: Vec3[] = [];
+
+  for (let sampleIndex = 0; sampleIndex <= sampleCount; sampleIndex += 1) {
+    const progress = sampleIndex / sampleCount;
+    const angle = progress * Math.PI * 2;
+    sampledPoints.push({
+      x: centerX + Math.cos(angle) * radiusX,
+      y: centerY + Math.sin(angle) * radiusY,
+      z: 0.5,
+    });
+  }
+
+  return [{ type: 'free', path: encodePoints(sampledPoints) }];
+}

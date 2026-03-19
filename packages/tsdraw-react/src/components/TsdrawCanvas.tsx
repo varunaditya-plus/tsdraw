@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import type { ColorStyle, DashStyle, DefaultToolId, SizeStyle, ToolDefinition, ToolId } from '@tsdraw/core';
+import type { ColorStyle, DashStyle, DefaultToolId, FillStyle, SizeStyle, ToolDefinition, ToolId } from '@tsdraw/core';
 import { SelectionOverlay } from './SelectionOverlay.js';
-import { StylePanel } from './StylePanel.js';
+import { StylePanel, type TsdrawStylePanelCustomPart, type TsdrawStylePanelPartItem } from './StylePanel.js';
 import { ToolOverlay } from './ToolOverlay.js';
 import { Toolbar, getDefaultToolbarIcon, type ToolbarPart } from './Toolbar.js';
 import {
@@ -12,13 +12,22 @@ import {
   type TsdrawToolOverlayState,
 } from '../canvas/useTsdrawCanvasController.js';
 
-const DEFAULT_TOOLBAR_PARTS: ToolbarPartItem[][] = [['undo', 'redo'], ['select', 'hand', 'pen', 'eraser']];
+const DEFAULT_TOOLBAR_PARTS: ToolbarPartItem[][] = [['undo', 'redo'], ['select', 'hand', 'pen', 'eraser', 'square', 'circle']];
 const EMPTY_CUSTOM_TOOLS: TsdrawCustomTool[] = [];
 const EMPTY_CUSTOM_ELEMENTS: TsdrawCustomElement[] = [];
+const EMPTY_STYLE_PANEL_PARTS: TsdrawStylePanelPartItem[] = [];
+const EMPTY_STYLE_PANEL_CUSTOM_PARTS: TsdrawStylePanelCustomPart[] = [];
+const DEFAULT_STYLE_PANEL_PARTS_BY_TOOL: Partial<Record<DefaultToolId, TsdrawStylePanelPartItem[]>> = {
+  pen: ['colors', 'dashes', 'sizes'],
+  square: ['colors', 'dashes', 'fills', 'sizes'],
+  circle: ['colors', 'dashes', 'fills', 'sizes'],
+};
 
 const DEFAULT_TOOL_LABELS: Record<DefaultToolId, string> = {
   select: 'Select',
   pen: 'Pen',
+  square: 'Rectangle',
+  circle: 'Ellipse',
   eraser: 'Eraser',
   hand: 'Hand',
 };
@@ -44,7 +53,10 @@ export interface TsdrawCustomTool {
   icon: ReactNode;
   iconSelected?: ReactNode;
   definition: ToolDefinition;
-  showStylePanel?: boolean;
+  stylePanel?: {
+    parts?: TsdrawStylePanelPartItem[];
+    customParts?: TsdrawStylePanelCustomPart[];
+  };
 }
 
 export type TsdrawToolbarBuiltInAction = 'undo' | 'redo';
@@ -59,10 +71,12 @@ export interface TsdrawUiPlacement {
 
 export interface TsdrawUiOptions {
   toolbar?: {
+    hide?: boolean;
     placement?: TsdrawUiPlacement;
     parts?: ToolbarPartItem[][];
   };
   stylePanel?: {
+    hide?: boolean;
     placement?: TsdrawUiPlacement;
   };
   customElements?: TsdrawCustomElement[];
@@ -81,7 +95,7 @@ export interface TsdrawUiOptions {
 export interface TsdrawCustomElementRenderArgs {
   currentTool: ToolId;
   setTool: (tool: ToolId) => void;
-  applyDrawStyle: (partial: Partial<{ color: ColorStyle; dash: DashStyle; size: SizeStyle }>) => void;
+  applyDrawStyle: (partial: Partial<{ color: ColorStyle; dash: DashStyle; fill: FillStyle; size: SizeStyle }>) => void;
 }
 
 export interface TsdrawCustomElement {
@@ -174,21 +188,6 @@ export function Tsdraw(props: TsdrawProps) {
     () => customTools.filter((customTool) => toolbarToolIds.has(customTool.id)).map((customTool) => customTool.definition),
     [customTools, toolbarToolIds]
   );
-  const stylePanelToolIds = useMemo<ToolId[]>(
-    () => {
-      const nextToolIds = new Set<ToolId>();
-      if (toolbarToolIds.has('pen')) {
-        nextToolIds.add('pen');
-      }
-      for (const customTool of customTools) {
-        if ((customTool.showStylePanel ?? false) && toolbarToolIds.has(customTool.id)) {
-          nextToolIds.add(customTool.id);
-        }
-      }
-      return [...nextToolIds];
-    },
-    [customTools, toolbarToolIds]
-  );
   const firstToolbarTool = useMemo(() => {
     for (const toolbarPart of toolbarPartIds) {
       for (const item of toolbarPart) {
@@ -224,6 +223,7 @@ export function Tsdraw(props: TsdrawProps) {
     currentTool,
     drawColor,
     drawDash,
+    drawFill,
     drawSize,
     selectedShapeIds,
     selectionBrush,
@@ -233,7 +233,6 @@ export function Tsdraw(props: TsdrawProps) {
     cursorContext,
     toolOverlay,
     isPersistenceReady,
-    showStylePanel,
     canUndo,
     canRedo,
     undo,
@@ -247,12 +246,13 @@ export function Tsdraw(props: TsdrawProps) {
     initialTool,
     theme: resolvedTheme,
     persistenceKey: props.persistenceKey,
-    stylePanelToolIds,
     onMount: props.onMount,
   });
 
   const toolbarPlacementStyle = resolvePlacementStyle(props.uiOptions?.toolbar?.placement, 'bottom-center', 0, 14);
   const stylePanelPlacementStyle = resolvePlacementStyle(props.uiOptions?.stylePanel?.placement, 'top-right', 8, 8);
+  const isToolbarHidden = props.uiOptions?.toolbar?.hide === true;
+  const isStylePanelHidden = props.uiOptions?.stylePanel?.hide === true;
   const canvasCursor = props.uiOptions?.cursor?.getCursor?.(cursorContext) ?? defaultCanvasCursor;
   const defaultToolOverlay = (
     <ToolOverlay
@@ -273,9 +273,24 @@ export function Tsdraw(props: TsdrawProps) {
   const onDashSelect = useCallback((dash: DashStyle) => {
     applyDrawStyle({ dash });
   }, [applyDrawStyle]);
+  const onFillSelect = useCallback((fill: FillStyle) => {
+    applyDrawStyle({ fill });
+  }, [applyDrawStyle]);
   const onSizeSelect = useCallback((size: SizeStyle) => {
     applyDrawStyle({ size });
   }, [applyDrawStyle]);
+  const activeCustomTool = customToolMap.get(currentTool);
+  const stylePanelParts = useMemo<TsdrawStylePanelPartItem[]>(
+    () => {
+      const fromCustomTool = activeCustomTool?.stylePanel?.parts;
+      if (fromCustomTool && fromCustomTool.length > 0) return fromCustomTool;
+      if (activeCustomTool?.stylePanel?.customParts && activeCustomTool.stylePanel.customParts.length > 0) return activeCustomTool.stylePanel.customParts.map((customPart) => customPart.id);
+      if (currentTool in DEFAULT_STYLE_PANEL_PARTS_BY_TOOL) return DEFAULT_STYLE_PANEL_PARTS_BY_TOOL[currentTool as DefaultToolId] ?? EMPTY_STYLE_PANEL_PARTS;
+      return EMPTY_STYLE_PANEL_PARTS;
+    },
+    [activeCustomTool, currentTool]
+  );
+  const stylePanelCustomParts = activeCustomTool?.stylePanel?.customParts ?? EMPTY_STYLE_PANEL_CUSTOM_PARTS;
   const toolbarParts = useMemo<ToolbarPart[]>(
     () =>
       toolbarPartIds
@@ -364,14 +379,18 @@ export function Tsdraw(props: TsdrawProps) {
         onResizePointerDown={handleResizePointerDown}
       />
       <StylePanel
-        visible={isPersistenceReady && showStylePanel}
+        visible={!isStylePanelHidden && isPersistenceReady && stylePanelParts.length > 0}
+        parts={stylePanelParts}
+        customParts={stylePanelCustomParts}
         style={stylePanelPlacementStyle}
         theme={resolvedTheme}
         drawColor={drawColor}
         drawDash={drawDash}
+        drawFill={drawFill}
         drawSize={drawSize}
         onColorSelect={onColorSelect}
         onDashSelect={onDashSelect}
+        onFillSelect={onFillSelect}
         onSizeSelect={onSizeSelect}
       />
       {customElements.map((customElement) => (
@@ -387,13 +406,15 @@ export function Tsdraw(props: TsdrawProps) {
           {customElement.render({ currentTool, setTool, applyDrawStyle })}
         </div>
       ))}
-      <Toolbar
-        parts={toolbarParts}
-        style={toolbarPlacementStyle}
-        currentTool={isPersistenceReady ? currentTool : null}
-        onToolChange={setTool}
-        disabled={!isPersistenceReady}
-      />
+      {!isToolbarHidden ? (
+        <Toolbar
+          parts={toolbarParts}
+          style={toolbarPlacementStyle}
+          currentTool={isPersistenceReady ? currentTool : null}
+          onToolChange={setTool}
+          disabled={!isPersistenceReady}
+        />
+      ) : null}
     </div>
   );
 }

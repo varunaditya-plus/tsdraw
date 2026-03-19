@@ -12,6 +12,11 @@ export type {
   UiAnchor,
 } from './components/TsdrawCanvas.js';
 export type {
+  TsdrawStylePanelPartItem,
+  TsdrawStylePanelCustomPart,
+  TsdrawStylePanelRenderContext,
+} from './components/StylePanel.js';
+export type {
   TsdrawMountApi,
   TsdrawCursorContext,
   TsdrawToolOverlayState,

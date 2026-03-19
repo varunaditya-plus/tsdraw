@@ -1,4 +1,4 @@
-import type { DashStyle, DrawShape, PageState, Shape, ShapeId, SizeStyle, ColorStyle } from '../types.js';
+import type { DashStyle, DrawShape, PageState, Shape, ShapeId, SizeStyle, ColorStyle, FillStyle } from '../types.js';
 
 export interface TsdrawPageRecord {
   id: string;
@@ -31,6 +31,7 @@ export interface TsdrawSessionStateSnapshot {
   drawStyle: {
     color: ColorStyle;
     dash: DashStyle;
+    fill?: FillStyle;
     size: SizeStyle;
   };
   selectedShapeIds: ShapeId[];

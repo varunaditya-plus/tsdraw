@@ -1,5 +1,5 @@
 import type { Viewport } from './viewport.js';
-import type { Shape, DrawShape } from '../types.js';
+import type { Shape, DrawShape, FillStyle } from '../types.js';
 import { STROKE_WIDTHS } from '../types.js';
 import { decodePoints } from '../utils/pathCodec.js';
 import { resolveThemeColor, type TsdrawRenderTheme } from '../utils/colors.js';
@@ -30,11 +30,17 @@ export class CanvasRenderer implements ICanvasRenderer {
     ctx.restore();
   }
 
+  // Paints a single stroke
   private paintStroke(ctx: CanvasRenderingContext2D, shape: DrawShape): void {
     const width = (STROKE_WIDTHS[shape.props.size] ?? 3.5) * shape.props.scale;
     const samples = flattenSegments(shape);
     if (samples.length === 0) return;
     const color = resolveThemeColor(shape.props.color, this.theme);
+    const fillStyle = shape.props.fill ?? 'none';
+
+    if (shape.props.isClosed && fillStyle !== 'none') {
+      this.paintClosedShapeFill(ctx, samples, color, fillStyle);
+    }
 
     if (shape.props.dash !== 'draw') {
       this.paintDashedStroke(ctx, samples, width, color, shape.props.dash);
@@ -92,6 +98,39 @@ export class CanvasRenderer implements ICanvasRenderer {
     ctx.stroke();
     ctx.restore();
   }
+
+  // Closed shapes are shapes where their start and end point are the same
+  private paintClosedShapeFill(
+    ctx: CanvasRenderingContext2D,
+    samples: Array<{ x: number; y: number }>,
+    color: string,
+    fillStyle: FillStyle
+  ): void {
+    if (samples.length < 3) return;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(samples[0]!.x, samples[0]!.y);
+    for (let i = 1; i < samples.length; i++) {
+      const sample = samples[i]!;
+      ctx.lineTo(sample.x, sample.y);
+    }
+    ctx.closePath();
+
+    if (fillStyle === 'solid') {
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.55;
+    } else if (fillStyle === 'none') {
+      ctx.fillStyle = this.theme === 'dark' ? '#0f0f0f' : '#fafafa';
+      ctx.globalAlpha = 1;
+    } else {
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.28;
+    }
+
+    ctx.fill();
+    ctx.restore();
+  }
 }
 
 const PRESSURE_FLOOR = 0.025;
@@ -114,7 +153,7 @@ function remap(
 }
 
 function strokeConfig(shape: DrawShape, width: number) {
-  const done = shape.props.isComplete;
+  const done = shape.props.isComplete || shape.props.isClosed === true;
   if (shape.props.isPen) {
     return {
       size: 1 + width * 1.2,

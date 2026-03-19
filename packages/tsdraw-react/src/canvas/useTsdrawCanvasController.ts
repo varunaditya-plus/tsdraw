@@ -19,7 +19,7 @@ import {
   type ToolDefinition,
   type ToolId,
 } from '@tsdraw/core';
-import type { ColorStyle, DashStyle, ShapeId, SizeStyle, SelectionBounds, TsdrawDocumentSnapshot, TsdrawEditorSnapshot } from '@tsdraw/core';
+import type { ColorStyle, DashStyle, FillStyle, ShapeId, SizeStyle, SelectionBounds, TsdrawDocumentSnapshot, TsdrawEditorSnapshot } from '@tsdraw/core';
 import { getCanvasCursor } from './cursor.js';
 import type { ScreenRect } from '../types.js';
 import { TsdrawLocalIndexedDb } from '../persistence/localIndexedDb.js';
@@ -56,14 +56,13 @@ export interface TsdrawMountApi {
   redo: () => boolean;
   canUndo: () => boolean;
   canRedo: () => boolean;
-  applyDrawStyle: (partial: Partial<{ color: ColorStyle; dash: DashStyle; size: SizeStyle }>) => void;
+  applyDrawStyle: (partial: Partial<{ color: ColorStyle; dash: DashStyle; fill: FillStyle; size: SizeStyle }>) => void;
 }
 
 export interface UseTsdrawCanvasControllerOptions {
   toolDefinitions?: ToolDefinition[];
   initialTool?: ToolId;
   theme?: 'light' | 'dark';
-  stylePanelToolIds?: ToolId[];
   persistenceKey?: string;
   onMount?: (api: TsdrawMountApi) => void | (() => void);
 }
@@ -74,6 +73,7 @@ export interface TsdrawCanvasController {
   currentTool: ToolId;
   drawColor: ColorStyle;
   drawDash: DashStyle;
+  drawFill: FillStyle;
   drawSize: SizeStyle;
   selectedShapeIds: ShapeId[];
   selectionBrush: ScreenRect | null;
@@ -83,13 +83,12 @@ export interface TsdrawCanvasController {
   cursorContext: TsdrawCursorContext;
   toolOverlay: TsdrawToolOverlayState;
   isPersistenceReady: boolean;
-  showStylePanel: boolean;
   canUndo: boolean;
   canRedo: boolean;
   undo: () => boolean;
   redo: () => boolean;
   setTool: (tool: ToolId) => void;
-  applyDrawStyle: (partial: Partial<{ color: ColorStyle; dash: DashStyle; size: SizeStyle }>) => void;
+  applyDrawStyle: (partial: Partial<{ color: ColorStyle; dash: DashStyle; fill: FillStyle; size: SizeStyle }>) => void;
   handleResizePointerDown: (e: ReactPointerEvent<HTMLButtonElement>, handle: ResizeHandle) => void;
   handleRotatePointerDown: (e: ReactPointerEvent<HTMLButtonElement>) => void;
 }
@@ -109,8 +108,6 @@ function resolveDrawColor(colorStyle: ColorStyle, theme: 'light' | 'dark'): stri
 }
 
 export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOptions = {}): TsdrawCanvasController {
-  const stylePanelToolIds = options.stylePanelToolIds ?? ['pen'];
-  const stylePanelToolIdsRef = useRef<ToolId[]>(stylePanelToolIds);
   const onMountRef = useRef(options.onMount);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -162,6 +159,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
   const [currentTool, setCurrentToolState] = useState<ToolId>(options.initialTool ?? 'pen');
   const [drawColor, setDrawColor] = useState<ColorStyle>('black');
   const [drawDash, setDrawDash] = useState<DashStyle>('draw');
+  const [drawFill, setDrawFill] = useState<FillStyle>('none');
   const [drawSize, setDrawSize] = useState<SizeStyle>('m');
   const [selectedShapeIds, setSelectedShapeIds] = useState<ShapeId[]>([]);
   const [selectionBrush, setSelectionBrush] = useState<ScreenRect | null>(null);
@@ -181,10 +179,6 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
   }, [currentTool]);
 
   useEffect(() => {
-    stylePanelToolIdsRef.current = stylePanelToolIds;
-  }, [stylePanelToolIds]);
-
-  useEffect(() => {
     onMountRef.current = options.onMount;
   }, [options.onMount]);
 
@@ -198,7 +192,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
 
   useEffect(() => {
     schedulePersistRef.current?.();
-  }, [selectedShapeIds, currentTool, drawColor, drawDash, drawSize]);
+  }, [selectedShapeIds, currentTool, drawColor, drawDash, drawFill, drawSize]);
 
   const render = useCallback(() => {
     const canvas = canvasRef.current;
@@ -354,6 +348,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     const initialStyle = editor.getCurrentDrawStyle();
     setDrawColor(initialStyle.color);
     setDrawDash(initialStyle.dash);
+    setDrawFill(initialStyle.fill);
     setDrawSize(initialStyle.size);
 
     const resize = () => {
@@ -444,6 +439,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
       const nextDrawStyle = editor.getCurrentDrawStyle();
       setDrawColor(nextDrawStyle.color);
       setDrawDash(nextDrawStyle.dash);
+      setDrawFill(nextDrawStyle.fill);
       setDrawSize(nextDrawStyle.size);
       setSelectionRotationDeg(0);
       render();
@@ -860,6 +856,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
         editor.setCurrentDrawStyle(partial);
         if (partial.color) setDrawColor(partial.color);
         if (partial.dash) setDrawDash(partial.dash);
+        if (partial.fill) setDrawFill(partial.fill);
         if (partial.size) setDrawSize(partial.size);
         render();
       },
@@ -915,12 +912,13 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
   );
 
   const applyDrawStyle = useCallback(
-    (partial: Partial<{ color: ColorStyle; dash: DashStyle; size: SizeStyle }>) => {
+    (partial: Partial<{ color: ColorStyle; dash: DashStyle; fill: FillStyle; size: SizeStyle }>) => {
       const editor = editorRef.current;
       if (!editor) return;
       editor.setCurrentDrawStyle(partial);
       if (partial.color) setDrawColor(partial.color);
       if (partial.dash) setDrawDash(partial.dash);
+      if (partial.fill) setDrawFill(partial.fill);
       if (partial.size) setDrawSize(partial.size);
       render();
     },
@@ -992,6 +990,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     currentTool,
     drawColor,
     drawDash,
+    drawFill,
     drawSize,
     selectedShapeIds,
     selectionBrush,
@@ -1001,7 +1000,6 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     cursorContext,
     toolOverlay,
     isPersistenceReady,
-    showStylePanel: stylePanelToolIdsRef.current.includes(currentTool),
     canUndo,
     canRedo,
     undo,

@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { ToolId } from '@tsdraw/core';
-import { IconArrowBackUp, IconArrowForwardUp, IconEraser, IconHandStop, IconPencil, IconPointer } from '@tabler/icons-react';
+import { IconArrowBackUp, IconArrowForwardUp, IconEraser, IconHandStop, IconPencil, IconPointer, IconSquare, IconCircle } from '@tabler/icons-react';
 
 export interface ToolbarToolItem {
   type: 'tool';
@@ -35,6 +35,8 @@ interface ToolbarProps {
 export function getDefaultToolbarIcon(toolId: ToolId, isActive: boolean): ReactNode {
   if (toolId === 'select') return <IconPointer size={16} stroke={1.8} fill={isActive ? 'currentColor' : 'none'} />;
   if (toolId === 'pen') return <IconPencil size={16} stroke={1.8} fill={isActive ? 'currentColor' : 'none'} />;
+  if (toolId === 'square') return <IconSquare size={16} stroke={1.8} fill={isActive ? 'currentColor' : 'none'} />;
+  if (toolId === 'circle') return <IconCircle size={16} stroke={1.8} fill={isActive ? 'currentColor' : 'none'} />;
   if (toolId === 'eraser') return <IconEraser size={16} stroke={1.8} fill={isActive ? 'currentColor' : 'none'} />;
   if (toolId === 'hand') return <IconHandStop size={16} stroke={isActive ? 1 : 1.8} fill={isActive ? 'currentColor' : 'none'} style={isActive ? { stroke: '#000000' } : undefined} />;
   return null;

@@ -7,7 +7,7 @@ import type {
   ToolStateTransitionInfo,
 } from '../store/stateNode.js';
 
-export type DefaultToolId = 'pen' | 'eraser' | 'select' | 'hand';
+export type DefaultToolId = 'pen' | 'eraser' | 'select' | 'hand' | 'square' | 'circle';
 export type ToolId = DefaultToolId | (string & {});
 
 export interface ToolDefinition {

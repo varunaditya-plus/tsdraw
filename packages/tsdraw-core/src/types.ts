@@ -22,6 +22,9 @@ export type SizeStyle = 's' | 'm' | 'l' | 'xl';
 // Available dash styles for drawing
 export type DashStyle = 'draw' | 'solid' | 'dashed' | 'dotted';
 
+// Fill styles used by shapes
+export type FillStyle = 'none' | 'semi' | 'solid' | 'blank';
+
 // Color styles (css-compatible or by palette key)
 export type ColorStyle = string;
 
@@ -34,6 +37,7 @@ export interface DrawShape {
   props: {
     color: ColorStyle;
     dash: DashStyle;
+    fill?: FillStyle;
     size: SizeStyle;
     scale: number;
     isPen: boolean;

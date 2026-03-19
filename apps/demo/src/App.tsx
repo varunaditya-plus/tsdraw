@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import { useCallback, useRef, useState, type MutableRefObject } from 'react';
+import { useCallback, useRef, useState, useMemo, type MutableRefObject } from 'react';
 import { Tsdraw, type TsdrawCustomTool, type TsdrawCustomElement } from '@tsdraw/react';
 import { DEFAULT_COLORS, type ColorStyle, type DashStyle, type SizeStyle } from '@tsdraw/core';
 import Confetti from 'react-confetti-boom';
@@ -16,15 +16,9 @@ const wavyTool: TsdrawCustomTool = {
   icon: <IconStar size={16} />,
   iconSelected: <IconStarFilled size={16} />,
   definition: wavyToolDefinition,
-  showStylePanel: true,
-};
-
-const emojiTool: TsdrawCustomTool = {
-  id: 'emoji',
-  label: 'Emoji',
-  icon: <IconMoodSmile size={16} />,
-  definition: emojiToolDefinition,
-  showStylePanel: true,
+  stylePanel: {
+    parts: ['colors', 'dashes', 'sizes'],
+  },
 };
 
 // These constants and functions are needed for the custom elements
@@ -47,53 +41,71 @@ function triggerConfetti() {
   root.render(<Confetti mode="boom" particleCount={100} shapeSize={15} spreadDeg={70} />);
 }
 
-function EmojiPickerPanel({
-  currentTool,
-  editorRef,
+function EmojiPickerPart({
   selectedEmojiRef,
+  onSelect,
 }: {
-  currentTool: string;
-  editorRef: MutableRefObject<any>;
   selectedEmojiRef: MutableRefObject<string>;
+  onSelect: (emoji: string) => void;
 }) {
   const [selectedEmoji, setSelectedEmoji] = useState(selectedEmojiRef.current);
 
-  const handleEmojiSelect = useCallback((nextEmoji: string) => {
-    selectedEmojiRef.current = nextEmoji;
-    if (editorRef.current) { editorRef.current.selectedEmoji = nextEmoji; }
-    setSelectedEmoji(nextEmoji);
-  }, [editorRef, selectedEmojiRef]);
-
-  if (currentTool !== 'emoji') return null;
+  const handleSelect = useCallback((emoji: string) => {
+    setSelectedEmoji(emoji);
+    onSelect(emoji);
+  }, [onSelect]);
 
   return (
-    // When possible, try using tsdraw-style-panel and the tsdraw css classes if you want your elements to match the tsdraw ui.
-    // Eventually you will be able to add tsdraw ui elements as customizable components.
-    <div className="tsdraw-style-panel" style={{ position: 'relative' }}>
-      <div className="tsdraw-style-colors">
-        {emojiOptions.map((emoji) => (
-          <button
-            key={emoji}
-            className="tsdraw-style-color"
-            data-active={selectedEmoji === emoji}
-            onClick={() => handleEmojiSelect(emoji)}
-            style={{ fontSize: '20px' }}
-          >
-            {emoji}
-          </button>
-        ))}
-      </div>
+    <div className="tsdraw-style-colors" style={{ padding: 0, gridTemplateColumns: 'repeat(4, 1fr)' }}>
+      {emojiOptions.map((emoji) => (
+        <button
+          key={emoji}
+          type="button"
+          className="tsdraw-style-color"
+          data-active={selectedEmoji === emoji ? 'true' : undefined}
+          onClick={() => handleSelect(emoji)}
+          style={{ fontSize: '20px' }}
+        >
+          {emoji}
+        </button>
+      ))}
     </div>
   );
 }
 
 export function App() {
+  const editorRef = useRef<any>(null);
+  const selectedEmojiRef = useRef(defaultEmoji);
+
+  const handleEmojiSelect = useCallback((nextEmoji: string) => {
+    selectedEmojiRef.current = nextEmoji;
+    if (editorRef.current) {
+      editorRef.current.selectedEmoji = nextEmoji;
+    }
+  }, []);
+
+  // Use useMemo to memoize the emoji tool to avoid re-rendering the Tsdraw instance unnecessarily
+  const emojiTool = useMemo<TsdrawCustomTool>(
+    () => ({
+      id: 'emoji',
+      label: 'Emoji',
+      icon: <IconMoodSmile size={16} />,
+      definition: emojiToolDefinition,
+      stylePanel: {
+        parts: ['dashes', 'sizes', 'emoji-picker'],
+        customParts: [
+          {
+            id: 'emoji-picker',
+            render: () => <EmojiPickerPart selectedEmojiRef={selectedEmojiRef} onSelect={handleEmojiSelect} />,
+          },
+        ],
+      },
+    }),
+    [handleEmojiSelect]
+  );
   // Below are two custom elements that can be added to the Tsdraw ui using the 'customElements' prop
   // The second one shows that you can actually edit properties of the Tsdraw instance.
   // You can use applyDrawStyle and setTool (check packages/tsdraw-react/src/components/TsdrawCanvas.tsx)
-
-  const editorRef = useRef<any>(null);
-  const selectedEmojiRef = useRef(defaultEmoji);
 
   const confettiButton: TsdrawCustomElement = {
     id: 'confetti-btn',
@@ -117,12 +129,6 @@ export function App() {
         randomize all draw styles!
       </button>
     ),
-  };
-
-  const emojiPicker: TsdrawCustomElement = {
-    id: 'emoji-picker',
-    placement: { anchor: 'top-right', offsetX: 179.5, offsetY: 18 },
-    render: ({ currentTool }) => <EmojiPickerPanel currentTool={currentTool} editorRef={editorRef} selectedEmojiRef={selectedEmojiRef} />
   };
 
   const handleMount = useCallback((api: any) => {
@@ -166,12 +172,13 @@ export function App() {
         uiOptions={{
           toolbar: { // top-left, bottom-center, center-right, left-center, ... (it can be any valid anchor)
             placement: { anchor: 'top-center', offsetX: 0, offsetY: 18 },
-            parts: [['undo', 'redo'], ['select', 'hand', 'pen', 'eraser', 'wavy', 'emoji']],
+            parts: [['undo', 'redo'], ['select', 'hand', 'pen', 'square', 'eraser', 'wavy', 'emoji']],
           },
           stylePanel: {
             placement: { anchor: 'top-right', offsetX: 18, offsetY: 18 },
+            hide: false,
           },
-          customElements: [confettiButton, randomStyleButton, emojiPicker],
+          customElements: [confettiButton, randomStyleButton],
         }}
         onMount={handleMount}
       />
