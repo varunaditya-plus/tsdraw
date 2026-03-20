@@ -6,6 +6,8 @@ import {
   buildSquareBounds,
 } from '../../geometric/geometricShapeHelpers.js';
 
+// Square drawing: shift constrains to a perfect square, otherwise creates a rectangle
+// Click without drag places a default sized rectangle
 export class SquareDrawingState extends GeometricDrawingState {
   static override id = 'square_drawing';
 

@@ -20,6 +20,8 @@ export class EraserErasingState extends StateNode {
   override onExit(): void { this.editor.setErasingShapes([]); }
   override onCancel(): void { this.ctx.transition('eraser_idle'); }
 
+  // On every pointer move, test the line from previous pointer position to current one against nearby shapes
+  // Only select shapes whose bounding box overlaps the sweep area to avoid testing all shapes
   private sweep(): void {
     const zoom = this.editor.getZoomLevel();
     const tolerance = ERASER_MARGIN / zoom;
@@ -43,6 +45,7 @@ export class EraserErasingState extends StateNode {
     this.editor.setErasingShapes(this._marked);
   }
 
+  // Delete marked shapes and reset, then go back to idle
   private finish(): void {
     const ids = this.editor.getErasingShapeIds();
     if (ids.length > 0) {

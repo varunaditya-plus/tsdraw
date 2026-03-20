@@ -20,6 +20,9 @@ interface GeometricDrawingStateConfig {
   buildSegments: (width: number, height: number) => DrawSegment[];
 }
 
+// Abstract base for geometric shape drawing states
+// Subclasses just provide a config with bound-builders and segment-builders
+// All pointer tracking, shape creation, and completion logic is here
 export abstract class GeometricDrawingState extends StateNode {
   private currentShapeId: ShapeId | null = null;
   private startedAt: ToolPointerDownInfo = { point: { x: 0, y: 0, z: 0.5 } };
@@ -54,6 +57,7 @@ export abstract class GeometricDrawingState extends StateNode {
     this.currentShapeId = nextShapeId;
   }
 
+  // Shift key switches between constrained and unconstrained bounds
   override onPointerMove(): void {
     const activeShape = this.getActiveShape();
     if (!activeShape) return;
@@ -96,6 +100,8 @@ export abstract class GeometricDrawingState extends StateNode {
     this.onPointerMove();
   }
 
+  // If user dragged, use the drag extents for the final shape
+  // If they just clicked without dragging, use default-sized shape
   private completeShape(): void {
     const activeShape = this.getActiveShape();
     const config = this.getConfig();

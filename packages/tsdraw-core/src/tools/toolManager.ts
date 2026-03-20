@@ -8,6 +8,7 @@ import type {
 } from '../store/stateNode.js';
 
 export type DefaultToolId = 'pen' | 'eraser' | 'select' | 'hand' | 'square' | 'circle';
+// lets devs pass arbitrary tool IDs while still getting autocomplete for defaults
 export type ToolId = DefaultToolId | (string & {});
 
 export interface ToolDefinition {
@@ -16,7 +17,8 @@ export interface ToolDefinition {
   stateConstructors: StateNodeConstructor[];
 }
 
-// Manages current tool and passes pointer/key events to state nodes
+// Manages current tool and routes pointer/key events to active state node
+// Each tool is a named entry point into a shared state pool. Calling setCurrentTool("pen") exits current state and enters pen's initial state.
 export class ToolManager {
   private currentToolId: ToolId = 'pen';
   private currentState: StateNode | null = null;
@@ -62,6 +64,7 @@ export class ToolManager {
     return this.currentState;
   }
 
+  // Transition between states within the same tool (ex. pen_idle -> pen_drawing)
   transition(stateId: string, info?: ToolStateTransitionInfo): void {
     const next = this.states.get(stateId);
     if (!next) return;

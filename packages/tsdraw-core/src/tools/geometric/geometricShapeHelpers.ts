@@ -1,6 +1,11 @@
 import type { DrawSegment, Vec3 } from '../../types.js';
 import { encodePoints } from '../../utils/pathCodec.js';
 
+// Helpers for geometric shape tools
+// Each tool provides "constrained" and "unconstrained" bound-builders
+// Constrained forces equal aspect ratio sides (shift), unconstrained allows freeform
+// Segment-builders turn those bounds into encoded draw segments
+
 export interface ShapeBounds {
   x: number;
   y: number;
@@ -14,6 +19,7 @@ const DEFAULT_RECTANGLE_HEIGHT = 120;
 const DEFAULT_ELLIPSE_WIDTH = 180;
 const DEFAULT_ELLIPSE_HEIGHT = 120;
 
+// Turn anchor + cursor into a bounding box, optionally forcing both axes to the longer side to get a square or circle
 function toSizedBounds(
   anchorX: number,
   anchorY: number,
@@ -79,6 +85,8 @@ export function buildDefaultCenteredRectangleBounds(
   };
 }
 
+// Four straight segments connecting the corners. encoded as draw segments so
+// the renderer handles them exactly like hand-drawn strokes.
 export function buildRectangleSegments(width: number, height: number): DrawSegment[] {
   const topLeft: Vec3 = { x: 0, y: 0, z: 0.5 };
   const topRight: Vec3 = { x: width, y: 0, z: 0.5 };
@@ -124,6 +132,9 @@ export function buildDefaultCenteredEllipseBounds(
   };
 }
 
+// Approximate the ellipse as a 64-sample polyline encoded as a single "free" segment.
+// good enough visually and means we can reuse all the same rendering/hit-testing
+// that works for regular draw strokes.
 export function buildEllipseSegments(width: number, height: number): DrawSegment[] {
   const centerX = width / 2;
   const centerY = height / 2;

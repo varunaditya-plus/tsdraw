@@ -1,5 +1,7 @@
 import { StateNode, type ToolPointerMoveInfo } from '../../../store/stateNode.js';
 
+// Pans viewport by screen-space delta each pointer move
+// Screen delta (not page delta) to get 1:1 tracking with finger
 export class HandDraggingState extends StateNode {
   static override id = 'hand_dragging';
 
