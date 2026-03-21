@@ -1,6 +1,7 @@
 import type { ToolId } from '@tsdraw/core';
+import type { TsdrawKeyboardShortcutOptions } from './canvasOptions.js';
 
-const TOOL_SHORTCUTS: Partial<Record<string, ToolId>> = {
+const DEFAULT_TOOL_SHORTCUTS: Partial<Record<string, ToolId>> = {
   v: 'select',
   h: 'hand',
   e: 'eraser',
@@ -12,6 +13,12 @@ const TOOL_SHORTCUTS: Partial<Record<string, ToolId>> = {
   o: 'circle',
   c: 'circle',
 };
+
+export function resolveToolShortcuts(shortcutOptions?: TsdrawKeyboardShortcutOptions): Partial<Record<string, ToolId>> {
+  if (!shortcutOptions?.toolShortcuts) return DEFAULT_TOOL_SHORTCUTS;
+  if (shortcutOptions.overrideDefaults) return { ...shortcutOptions.toolShortcuts };
+  return { ...DEFAULT_TOOL_SHORTCUTS, ...shortcutOptions.toolShortcuts };
+}
 
 export interface KeyboardShortcutHandlers {
   isToolAvailable: (tool: ToolId) => boolean;
@@ -30,7 +37,11 @@ export function isEditableTarget(eventTarget: EventTarget | null): boolean {
   return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT';
 }
 
-export function handleKeyboardShortcutKeyDown(event: KeyboardEvent, handlers: KeyboardShortcutHandlers): void {
+export function handleKeyboardShortcutKeyDown(
+  event: KeyboardEvent,
+  handlers: KeyboardShortcutHandlers,
+  toolShortcutMap: Partial<Record<string, ToolId>> = DEFAULT_TOOL_SHORTCUTS
+): void {
   if (isEditableTarget(event.target)) return;
 
   const loweredKey = event.key.toLowerCase();
@@ -46,7 +57,7 @@ export function handleKeyboardShortcutKeyDown(event: KeyboardEvent, handlers: Ke
   }
 
   if (!isMetaPressed && !event.altKey) {
-    const nextToolId = TOOL_SHORTCUTS[loweredKey];
+    const nextToolId = toolShortcutMap[loweredKey];
     if (nextToolId && handlers.isToolAvailable(nextToolId)) {
       handlers.setToolFromShortcut(nextToolId);
       event.preventDefault();

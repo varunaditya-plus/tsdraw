@@ -40,8 +40,20 @@ export function panViewport(viewport: Viewport, dx: number, dy: number): Viewpor
   return { ...viewport, x: viewport.x + dx, y: viewport.y + dy };
 }
 
-export function zoomViewport(viewport: Viewport, factor: number, centerX?: number, centerY?: number): Viewport {
-  const zoom = Math.max(0.1, Math.min(4, viewport.zoom * factor));
+export interface ZoomRange {
+  min: number;
+  max: number;
+}
+
+export const DEFAULT_ZOOM_RANGE: ZoomRange = { min: 0.1, max: 4 };
+
+export function clampZoom(zoom: number, range?: ZoomRange): number {
+  const { min, max } = range ?? DEFAULT_ZOOM_RANGE;
+  return Math.max(min, Math.min(max, zoom));
+}
+
+export function zoomViewport(viewport: Viewport, factor: number, centerX?: number, centerY?: number, zoomRange?: ZoomRange): Viewport {
+  const zoom = clampZoom(viewport.zoom * factor, zoomRange);
   if (centerX == null || centerY == null) {
     return { ...viewport, zoom };
   }

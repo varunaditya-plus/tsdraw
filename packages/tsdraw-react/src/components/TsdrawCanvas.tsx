@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import type { ColorStyle, DashStyle, DefaultToolId, FillStyle, SizeStyle, ToolDefinition, ToolId } from '@tsdraw/core';
+import type { ColorStyle, DashStyle, DefaultToolId, FillStyle, SizeStyle, ToolDefinition, ToolId, Viewport, TsdrawDocumentSnapshot, TsdrawEditorSnapshot } from '@tsdraw/core';
+import type { TsdrawCameraOptions, TsdrawTouchOptions, TsdrawKeyboardShortcutOptions, TsdrawPenOptions } from '../canvas/canvasOptions.js';
 import { SelectionOverlay } from './SelectionOverlay.js';
 import { StylePanel, type TsdrawStylePanelCustomPart, type TsdrawStylePanelPartItem } from './StylePanel.js';
 import { ToolOverlay } from './ToolOverlay.js';
@@ -115,6 +116,16 @@ export interface TsdrawProps {
   initialToolId?: ToolId;
   uiOptions?: TsdrawUiOptions;
   onMount?: (api: TsdrawMountApi) => void | (() => void);
+  cameraOptions?: TsdrawCameraOptions;
+  touchOptions?: TsdrawTouchOptions;
+  keyboardShortcuts?: TsdrawKeyboardShortcutOptions;
+  penOptions?: TsdrawPenOptions;
+  readOnly?: boolean;
+  autoFocus?: boolean;
+  snapshot?: TsdrawEditorSnapshot;
+  onChange?: (snapshot: TsdrawDocumentSnapshot) => void;
+  onCameraChange?: (viewport: Viewport) => void;
+  onToolChange?: (toolId: ToolId) => void;
 }
 
 export type TsdrawCanvasProps = TsdrawProps;
@@ -247,12 +258,22 @@ export function Tsdraw(props: TsdrawProps) {
     theme: resolvedTheme,
     persistenceKey: props.persistenceKey,
     onMount: props.onMount,
+    cameraOptions: props.cameraOptions,
+    touchOptions: props.touchOptions,
+    keyboardShortcuts: props.keyboardShortcuts,
+    penOptions: props.penOptions,
+    readOnly: props.readOnly,
+    autoFocus: props.autoFocus,
+    snapshot: props.snapshot,
+    onChange: props.onChange,
+    onCameraChange: props.onCameraChange,
+    onToolChange: props.onToolChange,
   });
 
   const toolbarPlacementStyle = resolvePlacementStyle(props.uiOptions?.toolbar?.placement, 'bottom-center', 0, 14);
   const stylePanelPlacementStyle = resolvePlacementStyle(props.uiOptions?.stylePanel?.placement, 'top-right', 8, 8);
   const isToolbarHidden = props.uiOptions?.toolbar?.hide === true;
-  const isStylePanelHidden = props.uiOptions?.stylePanel?.hide === true;
+  const isStylePanelHidden = props.uiOptions?.stylePanel?.hide === true || props.readOnly === true;
   const canvasCursor = props.uiOptions?.cursor?.getCursor?.(cursorContext) ?? defaultCanvasCursor;
   const defaultToolOverlay = (
     <ToolOverlay
@@ -348,12 +369,14 @@ export function Tsdraw(props: TsdrawProps) {
   return (
     <div
       ref={containerRef}
+      tabIndex={0}
       className={`tsdraw tsdraw-${resolvedTheme}mode ${props.className ?? ''}`}
       style={{
         width: props.width ?? '100%',
         height: props.height ?? '100%',
         position: 'relative',
         overflow: 'hidden',
+        outline: 'none',
         ...props.style,
       }}
     >

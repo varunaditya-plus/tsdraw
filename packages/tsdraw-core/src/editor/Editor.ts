@@ -1,6 +1,6 @@
 import { DocumentStore } from '../store/documentStore.js';
-import type { Viewport } from '../canvas/viewport.js';
-import { createViewport, screenToPage, zoomViewport } from '../canvas/viewport.js';
+import type { Viewport, ZoomRange } from '../canvas/viewport.js';
+import { createViewport, screenToPage, zoomViewport, clampZoom } from '../canvas/viewport.js';
 import { CanvasRenderer } from '../canvas/renderer.js';
 import { InputManager } from '../input/inputManager.js';
 import type { ToolStateContext } from '../store/stateNode.js';
@@ -33,6 +33,7 @@ export interface EditorOptions {
   dragDistanceSquared?: number;
   toolDefinitions?: ToolDefinition[];
   initialToolId?: ToolId;
+  zoomRange?: ZoomRange;
 }
 
 type EditorListener = () => void;
@@ -70,7 +71,7 @@ export class Editor {
   readonly tools: ToolManager = new ToolManager();
   readonly renderer: CanvasRenderer = new CanvasRenderer();
   viewport: Viewport = createViewport();
-  readonly options: { dragDistanceSquared: number };
+  readonly options: { dragDistanceSquared: number; zoomRange?: ZoomRange };
   // Default draw style
   private drawStyle: { color: ColorStyle; dash: DashStyle; fill: FillStyle; size: SizeStyle } = {
     color: 'black',
@@ -91,7 +92,7 @@ export class Editor {
 
   // Creates a new editor instance with the given options (with defaults if not provided)
   constructor(opts: EditorOptions = {}) {
-    this.options = { dragDistanceSquared: opts.dragDistanceSquared ?? DRAG_DISTANCE_SQUARED };
+    this.options = { dragDistanceSquared: opts.dragDistanceSquared ?? DRAG_DISTANCE_SQUARED, zoomRange: opts.zoomRange };
     this.lastDocumentSnapshot = this.getDocumentSnapshot();
     this.store.listen(() => {
       this.captureDocumentHistory();
@@ -196,7 +197,7 @@ export class Editor {
     this.viewport = {
       x: partial.x ?? this.viewport.x,
       y: partial.y ?? this.viewport.y,
-      zoom: Math.max(0.1, Math.min(4, rawZoom)),
+      zoom: clampZoom(rawZoom, this.options.zoomRange),
     };
     this.emitChange();
   }
@@ -209,7 +210,7 @@ export class Editor {
   }
 
   zoomAt(factor: number, screenX: number, screenY: number): void {
-    this.viewport = zoomViewport(this.viewport, factor, screenX, screenY);
+    this.viewport = zoomViewport(this.viewport, factor, screenX, screenY, this.options.zoomRange);
     this.emitChange();
   }
 

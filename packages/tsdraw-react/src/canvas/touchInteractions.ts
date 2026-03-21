@@ -2,10 +2,12 @@ import {
   type Editor,
   type CameraPanSession,
   type CameraSlideAnimation,
+  type CameraSlideOptions,
   beginCameraPan,
   moveCameraPan,
   startCameraSlide,
 } from '@tsdraw/core';
+import type { TsdrawTouchOptions } from './canvasOptions.js';
 
 const TAP_MAX_DURATION_MS = 100; // the max time of a tap gesture
 const DOUBLE_TAP_INTERVAL_MS = 100; // the min time between double taps
@@ -40,6 +42,7 @@ export interface TouchInteractionHandlers {
   runUndo: () => boolean;
   runRedo: () => boolean;
   isPenModeActive: () => boolean;
+  getSlideOptions: () => { enabled: boolean; slideOptions?: CameraSlideOptions };
 }
 
 export interface TouchInteractionController {
@@ -56,8 +59,13 @@ export interface TouchInteractionController {
 export function createTouchInteractionController(
   editor: Editor,
   canvas: HTMLCanvasElement,
-  handlers: TouchInteractionHandlers
+  handlers: TouchInteractionHandlers,
+  touchOptions?: TsdrawTouchOptions
 ): TouchInteractionController {
+  const allowPinchZoom = touchOptions?.pinchToZoom !== false;
+  const allowFingerPan = touchOptions?.fingerPanInPenMode !== false;
+  const allowTapUndoRedo = touchOptions?.tapUndoRedo !== false;
+  const allowTrackpadGestures = touchOptions?.trackpadGestures !== false;
   const activeTouchPoints = new Map<number, { x: number; y: number }>();
   const touchTapState: TouchTapState = {
     active: false,
@@ -106,7 +114,7 @@ export function createTouchInteractionController(
     if (!touchTapState.active) return;
 
     const elapsed = performance.now() - touchTapState.startTime;
-    if (!touchTapState.moved && elapsed <= TAP_MAX_DURATION_MS && (touchTapState.maxTouchCount === 2 || touchTapState.maxTouchCount === 3)) {
+    if (allowTapUndoRedo && !touchTapState.moved && elapsed <= TAP_MAX_DURATION_MS && (touchTapState.maxTouchCount === 2 || touchTapState.maxTouchCount === 3)) {
       const fingerCount = touchTapState.maxTouchCount as 2 | 3;
       const now = performance.now();
       const previousTapTime = touchTapState.lastTapAtByCount[fingerCount] ?? 0;
@@ -161,9 +169,9 @@ export function createTouchInteractionController(
     const originDistance = Math.hypot(center.x - touchCameraState.initialCenter.x, center.y - touchCameraState.initialCenter.y);
 
     if (touchCameraState.mode === 'not-sure') {
-      if (touchDistance > PINCH_MODE_ZOOM_DISTANCE) touchCameraState.mode = 'zooming';
+      if (allowPinchZoom && touchDistance > PINCH_MODE_ZOOM_DISTANCE) touchCameraState.mode = 'zooming';
       else if (originDistance > PINCH_MODE_PAN_DISTANCE) touchCameraState.mode = 'panning';
-    } else if (touchCameraState.mode === 'panning' && touchDistance > PINCH_MODE_SWITCH_TO_ZOOM_DISTANCE) touchCameraState.mode = 'zooming';
+    } else if (allowPinchZoom && touchCameraState.mode === 'panning' && touchDistance > PINCH_MODE_SWITCH_TO_ZOOM_DISTANCE) touchCameraState.mode = 'zooming';
 
     const canvasRect = canvas.getBoundingClientRect();
     const centerOnCanvasX = center.x - canvasRect.left;
@@ -211,7 +219,7 @@ export function createTouchInteractionController(
       return true;
     }
 
-    if (handlers.isPenModeActive() && activeTouchPoints.size === 1) {
+    if (allowFingerPan && handlers.isPenModeActive() && activeTouchPoints.size === 1) {
       handlers.cancelActivePointerInteraction();
       fingerPanPointerId = event.pointerId;
       fingerPanSession = beginCameraPan(editor.viewport, event.clientX, event.clientY);
@@ -252,11 +260,15 @@ export function createTouchInteractionController(
     if (wasFingerPan) {
       endFingerPan();
       if (releasedPanSession) {
-        fingerPanSlide = startCameraSlide(
-          releasedPanSession,
-          (dx, dy) => editor.panBy(dx, dy),
-          () => handlers.refreshView()
-        );
+        const slideConfig = handlers.getSlideOptions();
+        if (slideConfig.enabled) {
+          fingerPanSlide = startCameraSlide(
+            releasedPanSession,
+            (dx, dy) => editor.panBy(dx, dy),
+            () => handlers.refreshView(),
+            slideConfig.slideOptions
+          );
+        }
       }
     }
     maybeHandleTouchTapGesture();
@@ -269,6 +281,7 @@ export function createTouchInteractionController(
   const handleGestureEvent = (event: Event, container: HTMLElement) => {
     if (!container.contains(event.target as Node)) return;
     event.preventDefault();
+    if (!allowTrackpadGestures) return;
 
     const gestureEvent = event as Event & { scale?: number; clientX?: number; clientY?: number };
     if (gestureEvent.scale == null) return;

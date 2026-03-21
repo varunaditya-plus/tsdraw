@@ -25,3 +25,9 @@ export { getDefaultToolbarIcon } from './components/Toolbar.js';
 export type { ToolbarActionItem, ToolbarPart, ToolbarRenderItem, ToolbarToolItem } from './components/Toolbar.js';
 export { TsdrawCanvas } from './components/TsdrawCanvas.js';
 export type { TsdrawCanvasProps } from './components/TsdrawCanvas.js';
+export type {
+  TsdrawCameraOptions,
+  TsdrawTouchOptions,
+  TsdrawKeyboardShortcutOptions,
+  TsdrawPenOptions,
+} from './canvas/canvasOptions.js';

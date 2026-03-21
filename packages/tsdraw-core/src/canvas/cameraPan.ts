@@ -78,15 +78,21 @@ export interface CameraSlideAnimation {
   stop: () => void;
 }
 
+export interface CameraSlideOptions {
+  friction?: number;
+}
+
 // Start a camera slide animation from the given session and apply the pan to the viewport
 export function startCameraSlide(
   session: CameraPanSession,
   applyPan: (dx: number, dy: number) => void,
-  onFrame: () => void
+  onFrame: () => void,
+  slideOptions?: CameraSlideOptions
 ): CameraSlideAnimation | null {
-  const timeSinceLastMove = performance.now() - session.lastMoveTime; // time since the last move
-  const FRAME_DURATION = 16; // duration of an animation frame
-  const decayFactor = Math.pow(1 - VELOCITY_LERP_FACTOR, timeSinceLastMove / FRAME_DURATION); // used to decay the velocity over time so slide is smoother at the end
+  const friction = slideOptions?.friction ?? SLIDE_FRICTION;
+  const timeSinceLastMove = performance.now() - session.lastMoveTime;
+  const FRAME_DURATION = 16;
+  const decayFactor = Math.pow(1 - VELOCITY_LERP_FACTOR, timeSinceLastMove / FRAME_DURATION);
   const effectiveVx = session.velocityX * decayFactor;
   const effectiveVy = session.velocityY * decayFactor;
 
@@ -108,7 +114,7 @@ export function startCameraSlide(
     applyPan(dirX * currentSpeed * elapsed, dirY * currentSpeed * elapsed);
     onFrame();
 
-    currentSpeed *= SLIDE_FRICTION;
+    currentSpeed *= friction;
 
     if (currentSpeed < SLIDE_MIN_SPEED) {
       rafId = 0;

@@ -22,14 +22,17 @@ import {
   type ResizeHandle,
   type ToolDefinition,
   type ToolId,
+  type Viewport,
+  type TsdrawEditorSnapshot,
 } from '@tsdraw/core';
-import type { ColorStyle, DashStyle, FillStyle, ShapeId, SizeStyle, SelectionBounds, TsdrawDocumentSnapshot, TsdrawEditorSnapshot } from '@tsdraw/core';
+import type { ColorStyle, DashStyle, FillStyle, ShapeId, SizeStyle, SelectionBounds, TsdrawDocumentSnapshot } from '@tsdraw/core';
 import { getCanvasCursor } from './cursor.js';
 import { createTouchInteractionController } from './touchInteractions.js';
-import { handleKeyboardShortcutKeyDown, handleKeyboardShortcutKeyUp } from './keyboardShortcuts.js';
+import { handleKeyboardShortcutKeyDown, handleKeyboardShortcutKeyUp, resolveToolShortcuts } from './keyboardShortcuts.js';
 import type { ScreenRect } from '../types.js';
 import { TsdrawLocalIndexedDb } from '../persistence/localIndexedDb.js';
 import { getOrCreateSessionId } from '../persistence/sessionId.js';
+import type { TsdrawCameraOptions, TsdrawTouchOptions, TsdrawKeyboardShortcutOptions, TsdrawPenOptions } from './canvasOptions.js';
 
 type SelectDragMode = 'none' | 'marquee' | 'move' | 'resize' | 'rotate';
 
@@ -71,6 +74,16 @@ export interface UseTsdrawCanvasControllerOptions {
   theme?: 'light' | 'dark';
   persistenceKey?: string;
   onMount?: (api: TsdrawMountApi) => void | (() => void);
+  cameraOptions?: TsdrawCameraOptions;
+  touchOptions?: TsdrawTouchOptions;
+  keyboardShortcuts?: TsdrawKeyboardShortcutOptions;
+  penOptions?: TsdrawPenOptions;
+  readOnly?: boolean;
+  autoFocus?: boolean;
+  snapshot?: TsdrawEditorSnapshot;
+  onChange?: (snapshot: TsdrawDocumentSnapshot) => void;
+  onCameraChange?: (viewport: Viewport) => void;
+  onToolChange?: (toolId: ToolId) => void;
 }
 
 export interface TsdrawCanvasController {
@@ -131,8 +144,18 @@ function getHandlePagePoint(bounds: SelectionBounds, handle: ResizeHandle): { x:
 
 const ZOOM_WHEEL_CAP = 10;
 
+const VIEW_ONLY_TOOLS = new Set<ToolId>(['select', 'hand']);
+
 export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOptions = {}): TsdrawCanvasController {
   const onMountRef = useRef(options.onMount);
+  const onChangeRef = useRef(options.onChange);
+  const onCameraChangeRef = useRef(options.onCameraChange);
+  const onToolChangeRef = useRef(options.onToolChange);
+  const cameraOptionsRef = useRef(options.cameraOptions);
+  const touchOptionsRef = useRef(options.touchOptions);
+  const keyboardShortcutsRef = useRef(options.keyboardShortcuts);
+  const penOptionsRef = useRef(options.penOptions);
+  const readOnlyRef = useRef(options.readOnly ?? false);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const editorRef = useRef<Editor | null>(null);
@@ -205,13 +228,16 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
   const [pointerScreenPoint, setPointerScreenPoint] = useState({ x: 0, y: 0 });
   const [isPointerInsideCanvas, setIsPointerInsideCanvas] = useState(false);
 
-  useEffect(() => {
-    currentToolRef.current = currentTool;
-  }, [currentTool]);
-
-  useEffect(() => {
-    onMountRef.current = options.onMount;
-  }, [options.onMount]);
+  useEffect(() => { currentToolRef.current = currentTool; }, [currentTool]);
+  useEffect(() => { onMountRef.current = options.onMount; }, [options.onMount]);
+  useEffect(() => { onChangeRef.current = options.onChange; }, [options.onChange]);
+  useEffect(() => { onCameraChangeRef.current = options.onCameraChange; }, [options.onCameraChange]);
+  useEffect(() => { onToolChangeRef.current = options.onToolChange; }, [options.onToolChange]);
+  useEffect(() => { cameraOptionsRef.current = options.cameraOptions; }, [options.cameraOptions]);
+  useEffect(() => { touchOptionsRef.current = options.touchOptions; }, [options.touchOptions]);
+  useEffect(() => { keyboardShortcutsRef.current = options.keyboardShortcuts; }, [options.keyboardShortcuts]);
+  useEffect(() => { penOptionsRef.current = options.penOptions; }, [options.penOptions]);
+  useEffect(() => { readOnlyRef.current = options.readOnly ?? false; }, [options.readOnly]);
 
   useEffect(() => {
     selectedShapeIdsRef.current = selectedShapeIds;
@@ -356,13 +382,21 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     if (!container || !canvas) return;
 
     const initialTool = options.initialTool ?? 'pen';
+    const cameraOpts = cameraOptionsRef.current;
+    const touchOpts = touchOptionsRef.current;
+    const toolShortcutMap = resolveToolShortcuts(keyboardShortcutsRef.current);
     const editor = new Editor({
       toolDefinitions: options.toolDefinitions,
       initialToolId: initialTool,
+      zoomRange: cameraOpts?.zoomRange,
     });
     editor.renderer.setTheme(options.theme ?? 'light');
     if (!editor.tools.hasTool(initialTool)) {
       editor.setCurrentTool('pen');
+    }
+
+    if (options.snapshot) {
+      editor.loadPersistenceSnapshot(options.snapshot);
     }
 
     let disposed = false;
@@ -548,16 +582,25 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
       render();
       refreshSelectionBounds(editor);
     };
+    const emitCameraChange = () => {
+      onCameraChangeRef.current?.({ ...editor.viewport });
+    };
+
     const touchInteractions = createTouchInteractionController(editor, canvas, {
       cancelActivePointerInteraction,
       refreshView: () => {
         render();
         refreshSelectionBounds(editor);
+        emitCameraChange();
       },
       runUndo: () => applyDocumentChangeResult(editor.undo()),
       runRedo: () => applyDocumentChangeResult(editor.redo()),
       isPenModeActive: () => penModeRef.current,
-    });
+      getSlideOptions: () => ({
+        enabled: cameraOptionsRef.current?.slideEnabled !== false,
+        slideOptions: { friction: cameraOptionsRef.current?.slideFriction },
+      }),
+    }, touchOpts);
 
     const hasRealPressure = (pressure: number | undefined) => pressure != null && pressure > 0 && pressure !== 0.5;
 
@@ -570,10 +613,12 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
 
     const handlePointerDown = (e: PointerEvent) => {
       if (!canvas.contains(e.target as Node)) return;
+      if (cameraOptionsRef.current?.locked && e.pointerType !== 'pen') return;
 
       stopActiveSlide();
 
-      if (!penDetectedRef.current && (e.pointerType === 'pen' || hasRealPressure(e.pressure))) {
+      const penAutoDetect = penOptionsRef.current?.autoDetect !== false;
+      if (penAutoDetect && !penDetectedRef.current && (e.pointerType === 'pen' || hasRealPressure(e.pressure))) {
         penDetectedRef.current = true;
         penModeRef.current = true;
       }
@@ -593,6 +638,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
 
       if (isTouchBlockedByPenMode) { return; }
       if (activePointerIdsRef.current.size > 1) { return; }
+      if (readOnlyRef.current && !VIEW_ONLY_TOOLS.has(currentToolRef.current)) { return; }
 
       isPointerActiveRef.current = true;
       editor.beginHistoryEntry();
@@ -602,7 +648,8 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
 
       const first = sampleEvents(e)[0]!;
       const { x, y } = getPagePoint(first);
-      const pressure = first.pressure ?? 0.5;
+      const pressureSensitivity = penOptionsRef.current?.pressureSensitivity ?? 1;
+      const pressure = (first.pressure ?? 0.5) * pressureSensitivity;
       const isPen = first.pointerType === 'pen' || hasRealPressure(first.pressure);
 
       if (currentToolRef.current === 'select') {
@@ -655,7 +702,8 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     };
 
     const handlePointerMove = (e: PointerEvent) => {
-      if (!penDetectedRef.current && (e.pointerType === 'pen' || hasRealPressure(e.pressure))) {
+      const penAutoDetectOnMove = penOptionsRef.current?.autoDetect !== false;
+      if (penAutoDetectOnMove && !penDetectedRef.current && (e.pointerType === 'pen' || hasRealPressure(e.pressure))) {
         penDetectedRef.current = true;
         penModeRef.current = true;
       }
@@ -671,9 +719,10 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
       const dy = prevClient ? e.clientY - prevClient.y : 0;
       lastPointerClientRef.current = { x: e.clientX, y: e.clientY };
 
+      const movePressureSensitivity = penOptionsRef.current?.pressureSensitivity ?? 1;
       for (const sample of sampleEvents(e)) {
         const { x, y } = getPagePoint(sample);
-        const pressure = sample.pressure ?? 0.5;
+        const pressure = (sample.pressure ?? 0.5) * movePressureSensitivity;
         const isPen = sample.pointerType === 'pen' || hasRealPressure(sample.pressure);
         editor.input.pointerMove(x, y, pressure, isPen);
       }
@@ -827,11 +876,12 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
       render();
       refreshSelectionBounds(editor);
 
-      if (handPanSession) {
+      if (handPanSession && cameraOptionsRef.current?.slideEnabled !== false) {
         activeCameraSlideRef.current = startCameraSlide(
           handPanSession,
-          (slideDx, slideDy) => editor.panBy(slideDx, slideDy),
-          () => { render(); refreshSelectionBounds(editor); }
+          (slideDx, slideDy) => { editor.panBy(slideDx, slideDy); emitCameraChange(); },
+          () => { render(); refreshSelectionBounds(editor); },
+          { friction: cameraOptionsRef.current?.slideFriction }
         );
       }
 
@@ -881,18 +931,24 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     const handleWheel = (e: WheelEvent) => {
       if (!container.contains(e.target as Node)) return;
       e.preventDefault();
+      const camOpts = cameraOptionsRef.current;
+      if (camOpts?.locked) return;
+      if (camOpts?.wheelBehavior === 'none') return;
       if (touchInteractions.isTrackpadZoomActive()) return;
       const delta = normalizeWheelDelta(e);
+      const panMultiplier = camOpts?.panSpeed ?? 1;
+      const zoomMultiplier = camOpts?.zoomSpeed ?? 1;
       if (delta.z !== 0) {
         const rect = canvas.getBoundingClientRect();
         const pointX = e.clientX - rect.left;
         const pointY = e.clientY - rect.top;
-        editor.zoomAt(Math.exp(delta.z), pointX, pointY);
+        editor.zoomAt(Math.exp(delta.z * zoomMultiplier), pointX, pointY);
       } else {
-        editor.panBy(delta.x, delta.y);
+        editor.panBy(delta.x * panMultiplier, delta.y * panMultiplier);
       }
       render();
       refreshSelectionBounds(editor);
+      emitCameraChange();
     };
 
     const handleGestureEvent = (e: Event) => {
@@ -900,24 +956,36 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (keyboardShortcutsRef.current?.enabled === false) return;
+      const isReadOnly = readOnlyRef.current;
       handleKeyboardShortcutKeyDown(e, {
-        isToolAvailable: (tool) => editor.tools.hasTool(tool),
+        isToolAvailable: (tool) => {
+          if (isReadOnly && !VIEW_ONLY_TOOLS.has(tool)) return false;
+          return editor.tools.hasTool(tool);
+        },
         setToolFromShortcut: (tool) => {
           editor.setCurrentTool(tool);
           setCurrentToolState(tool);
           currentToolRef.current = tool;
           if (tool !== 'select') resetSelectUi();
           render();
+          onToolChangeRef.current?.(tool);
         },
-        runHistoryShortcut: (shouldRedo) => applyDocumentChangeResult(shouldRedo ? editor.redo() : editor.undo()),
-        deleteSelection: () => (currentToolRef.current === 'select' ? deleteCurrentSelection() : false),
+        runHistoryShortcut: (shouldRedo) => {
+          if (isReadOnly) return false;
+          return applyDocumentChangeResult(shouldRedo ? editor.redo() : editor.undo());
+        },
+        deleteSelection: () => {
+          if (isReadOnly) return false;
+          return currentToolRef.current === 'select' ? deleteCurrentSelection() : false;
+        },
         dispatchKeyDown: (event) => {
           editor.input.setModifiers(event.shiftKey, event.ctrlKey, event.metaKey);
           editor.tools.keyDown({ key: event.key });
           render();
         },
         dispatchKeyUp: () => undefined,
-      });
+      }, toolShortcutMap);
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -998,6 +1066,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     const cleanupEditorListener = editor.listen(() => {
       if (ignorePersistenceChanges) return;
       schedulePersist();
+      onChangeRef.current?.(editor.getDocumentSnapshot());
     });
     const cleanupHistoryListener = editor.listenHistory(() => {
       syncHistoryState();
@@ -1069,6 +1138,10 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
       },
     });
 
+    if (options.autoFocus !== false) {
+      container.focus({ preventScroll: true });
+    }
+
     return () => {
       disposed = true;
       schedulePersistRef.current = null;
@@ -1119,10 +1192,12 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
       const editor = editorRef.current;
       if (!editor) return;
       if (!editor.tools.hasTool(tool)) return;
+      if (readOnlyRef.current && !VIEW_ONLY_TOOLS.has(tool)) return;
       editor.setCurrentTool(tool);
       setCurrentToolState(tool);
       currentToolRef.current = tool;
       if (tool !== 'select') resetSelectUi();
+      onToolChangeRef.current?.(tool);
     },
     [resetSelectUi]
   );
