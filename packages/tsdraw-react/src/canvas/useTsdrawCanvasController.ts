@@ -17,6 +17,7 @@ import {
   getTopShapeAtPoint,
   resolveThemeColor,
   startCameraSlide,
+  renderCanvasBackground,
   HandDraggingState,
   type CameraSlideAnimation,
   type ResizeHandle,
@@ -24,6 +25,7 @@ import {
   type ToolId,
   type Viewport,
   type TsdrawEditorSnapshot,
+  type TsdrawBackgroundOptions,
 } from '@tsdraw/core';
 import type { ColorStyle, DashStyle, FillStyle, ShapeId, SizeStyle, SelectionBounds, TsdrawDocumentSnapshot } from '@tsdraw/core';
 import { getCanvasCursor } from './cursor.js';
@@ -78,6 +80,7 @@ export interface UseTsdrawCanvasControllerOptions {
   touchOptions?: TsdrawTouchOptions;
   keyboardShortcuts?: TsdrawKeyboardShortcutOptions;
   penOptions?: TsdrawPenOptions;
+  background?: TsdrawBackgroundOptions;
   readOnly?: boolean;
   autoFocus?: boolean;
   snapshot?: TsdrawEditorSnapshot;
@@ -155,6 +158,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
   const touchOptionsRef = useRef(options.touchOptions);
   const keyboardShortcutsRef = useRef(options.keyboardShortcuts);
   const penOptionsRef = useRef(options.penOptions);
+  const backgroundRef = useRef(options.background);
   const readOnlyRef = useRef(options.readOnly ?? false);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -237,6 +241,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
   useEffect(() => { touchOptionsRef.current = options.touchOptions; }, [options.touchOptions]);
   useEffect(() => { keyboardShortcutsRef.current = options.keyboardShortcuts; }, [options.keyboardShortcuts]);
   useEffect(() => { penOptionsRef.current = options.penOptions; }, [options.penOptions]);
+  useEffect(() => { backgroundRef.current = options.background; }, [options.background]);
   useEffect(() => { readOnlyRef.current = options.readOnly ?? false; }, [options.readOnly]);
 
   useEffect(() => {
@@ -258,8 +263,11 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const dpr = dprRef.current || 1;
+    const logicalWidth = canvas.width / dpr;
+    const logicalHeight = canvas.height / dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+    ctx.clearRect(0, 0, logicalWidth, logicalHeight);
+    renderCanvasBackground(ctx, editor.viewport, logicalWidth, logicalHeight, backgroundRef.current, editor.renderer.theme);
     editor.render(ctx);
   }, []);
 
@@ -1186,6 +1194,11 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
     editor.renderer.setTheme(options.theme ?? 'light');
     render();
   }, [options.theme, render]);
+
+  useEffect(() => {
+    if (!editorRef.current) return;
+    render();
+  }, [options.background, render]);
 
   const setTool = useCallback(
     (tool: ToolId) => {

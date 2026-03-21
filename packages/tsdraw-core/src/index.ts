@@ -4,6 +4,7 @@ export * from './store/stateNode.js';
 export * from './canvas/viewport.js';
 export * from './canvas/cameraPan.js';
 export * from './canvas/renderer.js';
+export * from './canvas/backgroundRenderer.js';
 export * from './input/inputManager.js';
 export * from './editor/Editor.js';
 export type { IEditor } from './editor/editorTypes.js';

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import type { ColorStyle, DashStyle, DefaultToolId, FillStyle, SizeStyle, ToolDefinition, ToolId, Viewport, TsdrawDocumentSnapshot, TsdrawEditorSnapshot } from '@tsdraw/core';
+import type { ColorStyle, DashStyle, DefaultToolId, FillStyle, SizeStyle, ToolDefinition, ToolId, Viewport, TsdrawDocumentSnapshot, TsdrawEditorSnapshot, TsdrawBackgroundOptions } from '@tsdraw/core';
 import type { TsdrawCameraOptions, TsdrawTouchOptions, TsdrawKeyboardShortcutOptions, TsdrawPenOptions } from '../canvas/canvasOptions.js';
 import { SelectionOverlay } from './SelectionOverlay.js';
 import { StylePanel, type TsdrawStylePanelCustomPart, type TsdrawStylePanelPartItem } from './StylePanel.js';
@@ -120,6 +120,7 @@ export interface TsdrawProps {
   touchOptions?: TsdrawTouchOptions;
   keyboardShortcuts?: TsdrawKeyboardShortcutOptions;
   penOptions?: TsdrawPenOptions;
+  background?: TsdrawBackgroundOptions;
   readOnly?: boolean;
   autoFocus?: boolean;
   snapshot?: TsdrawEditorSnapshot;
@@ -262,6 +263,7 @@ export function Tsdraw(props: TsdrawProps) {
     touchOptions: props.touchOptions,
     keyboardShortcuts: props.keyboardShortcuts,
     penOptions: props.penOptions,
+    background: props.background,
     readOnly: props.readOnly,
     autoFocus: props.autoFocus,
     snapshot: props.snapshot,

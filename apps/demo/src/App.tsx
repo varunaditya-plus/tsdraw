@@ -180,6 +180,14 @@ export function App() {
           },
           customElements: [confettiButton, randomStyleButton],
         }}
+        background={{
+          type: 'dots',
+          color: '#000000',
+          colorDark: '#808080',
+          spacing: 25,
+          size: 1,
+          opacity: 0.5,
+        }}
         onMount={handleMount}
       />
     </div>

@@ -12,10 +12,14 @@ export interface ICanvasRenderer {
 
 // Default canvas renderer: draws shapes using (optionally) pressure-based width for ipads and whatnot
 export class CanvasRenderer implements ICanvasRenderer {
-  private theme: TsdrawRenderTheme = 'light';
+  private _theme: TsdrawRenderTheme = 'light';
+
+  get theme(): TsdrawRenderTheme {
+    return this._theme;
+  }
 
   setTheme(theme: TsdrawRenderTheme): void {
-    this.theme = theme;
+    this._theme = theme;
   }
 
   render(ctx: CanvasRenderingContext2D, viewport: Viewport, shapes: Shape[]): void {
@@ -35,7 +39,7 @@ export class CanvasRenderer implements ICanvasRenderer {
     const width = (STROKE_WIDTHS[shape.props.size] ?? 3.5) * shape.props.scale;
     const samples = flattenSegments(shape);
     if (samples.length === 0) return;
-    const color = resolveThemeColor(shape.props.color, this.theme);
+    const color = resolveThemeColor(shape.props.color, this._theme);
     const fillStyle = shape.props.fill ?? 'none';
 
     if (shape.props.isClosed && fillStyle !== 'none') {
@@ -121,7 +125,7 @@ export class CanvasRenderer implements ICanvasRenderer {
       ctx.fillStyle = color;
       ctx.globalAlpha = 0.55;
     } else if (fillStyle === 'none') {
-      ctx.fillStyle = this.theme === 'dark' ? '#0f0f0f' : '#fafafa';
+      ctx.fillStyle = this._theme === 'dark' ? '#0f0f0f' : '#fafafa';
       ctx.globalAlpha = 1;
     } else {
       ctx.fillStyle = color;

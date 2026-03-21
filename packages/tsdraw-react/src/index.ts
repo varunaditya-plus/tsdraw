@@ -31,3 +31,9 @@ export type {
   TsdrawKeyboardShortcutOptions,
   TsdrawPenOptions,
 } from './canvas/canvasOptions.js';
+export type {
+  TsdrawBackgroundOptions,
+  TsdrawBackgroundPreset,
+  TsdrawBackgroundCustom,
+  TsdrawBackgroundType,
+} from '@tsdraw/core';
