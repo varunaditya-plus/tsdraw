@@ -4,11 +4,15 @@ import type { Vec3 } from '../types.js';
 // Types for tool state events
 export interface ToolPointerDownInfo {
   point: Vec3;
+  screenX?: number;
+  screenY?: number;
 }
 
 export interface ToolPointerMoveInfo {
   screenDeltaX?: number;
   screenDeltaY?: number;
+  screenX?: number;
+  screenY?: number;
 }
 
 export interface ToolKeyInfo {

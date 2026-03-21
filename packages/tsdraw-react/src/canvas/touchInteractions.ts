@@ -1,4 +1,11 @@
-import type { Editor } from '@tsdraw/core';
+import {
+  type Editor,
+  type CameraPanSession,
+  type CameraSlideAnimation,
+  beginCameraPan,
+  moveCameraPan,
+  startCameraSlide,
+} from '@tsdraw/core';
 
 const TAP_MAX_DURATION_MS = 100; // the max time of a tap gesture
 const DOUBLE_TAP_INTERVAL_MS = 100; // the min time between double taps
@@ -23,8 +30,8 @@ interface TouchCameraState {
   mode: TouchCameraMode;
   previousCenter: { x: number; y: number };
   initialCenter: { x: number; y: number };
-  previousDistance: number;
   initialDistance: number;
+  initialZoom: number;
 }
 
 export interface TouchInteractionHandlers {
@@ -32,6 +39,7 @@ export interface TouchInteractionHandlers {
   refreshView: () => void;
   runUndo: () => boolean;
   runRedo: () => boolean;
+  isPenModeActive: () => boolean;
 }
 
 export interface TouchInteractionController {
@@ -41,6 +49,7 @@ export interface TouchInteractionController {
   handleGestureEvent: (event: Event, container: HTMLElement) => void;
   reset: () => void;
   isCameraGestureActive: () => boolean;
+  isFingerPanActive: () => boolean;
   isTrackpadZoomActive: () => boolean;
 }
 
@@ -63,17 +72,33 @@ export function createTouchInteractionController(
     mode: 'not-sure',
     previousCenter: { x: 0, y: 0 },
     initialCenter: { x: 0, y: 0 },
-    previousDistance: 1,
     initialDistance: 1,
+    initialZoom: 1,
   };
 
+  let fingerPanPointerId: number | null = null;
+  let fingerPanSession: CameraPanSession | null = null;
+  let fingerPanSlide: CameraSlideAnimation | null = null;
+
   const isTouchPointer = (event: PointerEvent) => event.pointerType === 'touch';
+
+  const stopFingerPanSlide = () => {
+    if (fingerPanSlide) {
+      fingerPanSlide.stop();
+      fingerPanSlide = null;
+    }
+  };
+
+  const endFingerPan = () => {
+    fingerPanPointerId = null;
+    fingerPanSession = null;
+  };
 
   const endTouchCameraGesture = () => {
     touchCameraState.active = false;
     touchCameraState.mode = 'not-sure';
-    touchCameraState.previousDistance = 1;
     touchCameraState.initialDistance = 1;
+    touchCameraState.initialZoom = 1;
   };
 
   const maybeHandleTouchTapGesture = () => {
@@ -114,8 +139,8 @@ export function createTouchInteractionController(
     touchCameraState.mode = 'not-sure';
     touchCameraState.previousCenter = center;
     touchCameraState.initialCenter = center;
-    touchCameraState.previousDistance = Math.max(1, distance);
     touchCameraState.initialDistance = Math.max(1, distance);
+    touchCameraState.initialZoom = editor.getZoomLevel();
   };
 
   const updateTouchCameraGesture = () => {
@@ -143,14 +168,23 @@ export function createTouchInteractionController(
     const canvasRect = canvas.getBoundingClientRect();
     const centerOnCanvasX = center.x - canvasRect.left;
     const centerOnCanvasY = center.y - canvasRect.top;
-    editor.panBy(centerDx, centerDy);
+
     if (touchCameraState.mode === 'zooming') {
-      const zoomFactor = distance / touchCameraState.previousDistance;
-      editor.zoomAt(zoomFactor, centerOnCanvasX, centerOnCanvasY);
+      const targetZoom = Math.max(0.1, Math.min(4, touchCameraState.initialZoom * (distance / touchCameraState.initialDistance)));
+      const pannedX = editor.viewport.x + centerDx;
+      const pannedY = editor.viewport.y + centerDy;
+      const pageAtCenterX = (centerOnCanvasX - pannedX) / editor.viewport.zoom;
+      const pageAtCenterY = (centerOnCanvasY - pannedY) / editor.viewport.zoom;
+      editor.setViewport({
+        x: centerOnCanvasX - pageAtCenterX * targetZoom,
+        y: centerOnCanvasY - pageAtCenterY * targetZoom,
+        zoom: targetZoom,
+      });
+    } else {
+      editor.panBy(centerDx, centerDy);
     }
 
     touchCameraState.previousCenter = center;
-    touchCameraState.previousDistance = distance;
     handlers.refreshView();
     return true;
   };
@@ -158,6 +192,7 @@ export function createTouchInteractionController(
   const handlePointerDown = (event: PointerEvent) => {
     if (!isTouchPointer(event)) return false;
 
+    stopFingerPanSlide();
     activeTouchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (!touchTapState.active) {
       touchTapState.active = true;
@@ -171,7 +206,15 @@ export function createTouchInteractionController(
     touchTapState.startPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
     if (activeTouchPoints.size === 2) {
+      endFingerPan();
       beginTouchCameraGesture();
+      return true;
+    }
+
+    if (handlers.isPenModeActive() && activeTouchPoints.size === 1) {
+      handlers.cancelActivePointerInteraction();
+      fingerPanPointerId = event.pointerId;
+      fingerPanSession = beginCameraPan(editor.viewport, event.clientX, event.clientY);
       return true;
     }
 
@@ -187,17 +230,37 @@ export function createTouchInteractionController(
       const moved = Math.hypot(event.clientX - tapStart.x, event.clientY - tapStart.y);
       if (moved > TAP_MOVE_TOLERANCE) touchTapState.moved = true;
     }
+
+    if (fingerPanPointerId === event.pointerId && fingerPanSession) {
+      const target = moveCameraPan(fingerPanSession, event.clientX, event.clientY);
+      editor.setViewport({ x: target.x, y: target.y });
+      handlers.refreshView();
+      return true;
+    }
+
     return updateTouchCameraGesture();
   };
 
   const handlePointerUpOrCancel = (event: PointerEvent) => {
     if (!isTouchPointer(event)) return false;
     const wasCameraGestureActive = touchCameraState.active;
+    const wasFingerPan = fingerPanPointerId === event.pointerId;
+    const releasedPanSession = wasFingerPan ? fingerPanSession : null;
     activeTouchPoints.delete(event.pointerId);
     touchTapState.startPoints.delete(event.pointerId);
     if (activeTouchPoints.size < 2) endTouchCameraGesture();
+    if (wasFingerPan) {
+      endFingerPan();
+      if (releasedPanSession) {
+        fingerPanSlide = startCameraSlide(
+          releasedPanSession,
+          (dx, dy) => editor.panBy(dx, dy),
+          () => handlers.refreshView()
+        );
+      }
+    }
     maybeHandleTouchTapGesture();
-    return wasCameraGestureActive;
+    return wasCameraGestureActive || wasFingerPan;
   };
 
   let gestureLastScale = 1;
@@ -238,6 +301,8 @@ export function createTouchInteractionController(
     touchTapState.active = false;
     touchTapState.startPoints.clear();
     endTouchCameraGesture();
+    endFingerPan();
+    stopFingerPanSlide();
   };
 
   return {
@@ -247,6 +312,7 @@ export function createTouchInteractionController(
     handleGestureEvent,
     reset,
     isCameraGestureActive: () => touchCameraState.active,
+    isFingerPanActive: () => fingerPanPointerId !== null,
     isTrackpadZoomActive: () => gestureActive,
   };
 }

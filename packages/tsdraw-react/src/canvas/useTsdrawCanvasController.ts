@@ -16,6 +16,9 @@ import {
   getShapesInBounds,
   getTopShapeAtPoint,
   resolveThemeColor,
+  startCameraSlide,
+  HandDraggingState,
+  type CameraSlideAnimation,
   type ResizeHandle,
   type ToolDefinition,
   type ToolId,
@@ -144,6 +147,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
   const schedulePersistRef = useRef<(() => void) | null>(null);
   const isPointerActiveRef = useRef(false);
   const pendingRemoteDocumentRef = useRef<TsdrawDocumentSnapshot | null>(null);
+  const activeCameraSlideRef = useRef<CameraSlideAnimation | null>(null);
   const selectionRotationRef = useRef(0);
   const resizeRef = useRef<{
     handle: ResizeHandle | null;
@@ -552,13 +556,22 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
       },
       runUndo: () => applyDocumentChangeResult(editor.undo()),
       runRedo: () => applyDocumentChangeResult(editor.redo()),
+      isPenModeActive: () => penModeRef.current,
     });
 
-    const isDrawingTool = (tool: ToolId) => tool !== 'select' && tool !== 'hand';
     const hasRealPressure = (pressure: number | undefined) => pressure != null && pressure > 0 && pressure !== 0.5;
+
+    const stopActiveSlide = () => {
+      if (activeCameraSlideRef.current) {
+        activeCameraSlideRef.current.stop();
+        activeCameraSlideRef.current = null;
+      }
+    };
 
     const handlePointerDown = (e: PointerEvent) => {
       if (!canvas.contains(e.target as Node)) return;
+
+      stopActiveSlide();
 
       if (!penDetectedRef.current && (e.pointerType === 'pen' || hasRealPressure(e.pressure))) {
         penDetectedRef.current = true;
@@ -568,7 +581,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
       activePointerIdsRef.current.add(e.pointerId);
 
       const startedCameraGesture = touchInteractions.handlePointerDown(e);
-      if (startedCameraGesture || touchInteractions.isCameraGestureActive()) {
+      if (startedCameraGesture || touchInteractions.isCameraGestureActive() || touchInteractions.isFingerPanActive()) {
         e.preventDefault();
         if (!canvas.hasPointerCapture(e.pointerId)) {
           canvas.setPointerCapture(e.pointerId);
@@ -576,9 +589,9 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
         return;
       }
 
-      const allowPointerDown = !penModeRef.current || e.pointerType !== 'touch' || !isDrawingTool(currentToolRef.current);
+      const isTouchBlockedByPenMode = penModeRef.current && e.pointerType === 'touch';
 
-      if (!allowPointerDown) { return; }
+      if (isTouchBlockedByPenMode) { return; }
       if (activePointerIdsRef.current.size > 1) { return; }
 
       isPointerActiveRef.current = true;
@@ -636,7 +649,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
 
       editor.input.pointerDown(x, y, pressure, isPen);
       editor.input.setModifiers(first.shiftKey, first.ctrlKey, first.metaKey);
-      editor.tools.pointerDown({ point: { x, y, z: pressure } });
+      editor.tools.pointerDown({ point: { x, y, z: pressure }, screenX: e.clientX, screenY: e.clientY });
       render();
       refreshSelectionBounds(editor);
     };
@@ -650,7 +663,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
         e.preventDefault();
         return;
       }
-      if (penModeRef.current && e.pointerType === 'touch' && isDrawingTool(currentToolRef.current) && !isPointerActiveRef.current) return;
+      if (penModeRef.current && e.pointerType === 'touch' && !isPointerActiveRef.current) return;
       if (activePointerIdsRef.current.size > 1) return;
       updatePointerPreview(e.clientX, e.clientY);
       const prevClient = lastPointerClientRef.current;
@@ -713,7 +726,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
       }
 
       editor.input.setModifiers(e.shiftKey, e.ctrlKey, e.metaKey);
-      editor.tools.pointerMove({ screenDeltaX: dx, screenDeltaY: dy });
+      editor.tools.pointerMove({ screenDeltaX: dx, screenDeltaY: dy, screenX: e.clientX, screenY: e.clientY });
       render();
       refreshSelectionBounds(editor);
     };
@@ -802,9 +815,26 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
         }
       }
 
+      let handPanSession = null as ReturnType<HandDraggingState['getPanSession']>;
+      if (currentToolRef.current === 'hand') {
+        const currentState = editor.tools.getCurrentState();
+        if (currentState instanceof HandDraggingState) {
+          handPanSession = currentState.getPanSession();
+        }
+      }
+
       editor.tools.pointerUp();
       render();
       refreshSelectionBounds(editor);
+
+      if (handPanSession) {
+        activeCameraSlideRef.current = startCameraSlide(
+          handPanSession,
+          (slideDx, slideDy) => editor.panBy(slideDx, slideDy),
+          () => { render(); refreshSelectionBounds(editor); }
+        );
+      }
+
       if (pendingRemoteDocumentRef.current) {
         const pendingRemoteDocument = pendingRemoteDocumentRef.current;
         pendingRemoteDocumentRef.current = null;
@@ -1060,6 +1090,7 @@ export function useTsdrawCanvasController(options: UseTsdrawCanvasControllerOpti
       isPointerActiveRef.current = false;
       activePointerIdsRef.current.clear();
       pendingRemoteDocumentRef.current = null;
+      stopActiveSlide();
       touchInteractions.reset();
       persistenceChannel?.close();
       void persistenceDb?.close();
